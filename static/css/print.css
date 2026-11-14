@@ -1,0 +1,152 @@
+/* CheekShield AI — Print & PDF Export Styles (Section 6, Phase 6) */
+
+@media print {
+  *, *::before, *::after {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+
+  #peachfield,
+  .site-header,
+  .hero-input-col,
+  .action-row,
+  .evidence-controls,
+  .category-chips-bar,
+  .receipt-actions,
+  .receipt-export-options,
+  .slab-footer,
+  .btn-clear,
+  .meter-calc-link,
+  .calc-popover,
+  .screenshot-viewer-container {
+    display: none !important;
+  }
+
+  .app-shell {
+    padding: 0 !important;
+  }
+
+  .container {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Force display of results */
+  .results-section {
+    display: block !important;
+    border-top: none !important;
+    padding: 0 !important;
+  }
+
+  .results-grid {
+    display: block !important;
+  }
+
+  .results-tally-col {
+    position: static !important;
+    margin-bottom: 24pt !important;
+  }
+
+  .receipt-strip {
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    transform: none !important;
+    animation: none !important;
+    background: #fff !important;
+    clip-path: none !important;
+  }
+
+  .receipt-strip::after {
+    display: none !important;
+  }
+
+  .receipt-title {
+    font-size: 14pt !important;
+    letter-spacing: 2px !important;
+  }
+
+  .evidence-row {
+    page-break-inside: avoid;
+    border-bottom: 1px solid #ccc !important;
+    padding: 12pt 0 !important;
+  }
+
+  /* Expand all collapsibles */
+  details {
+    display: block !important;
+  }
+
+  details[open] > summary, details > summary {
+    font-weight: bold !important;
+  }
+
+  details > * {
+    display: block !important;
+  }
+
+  /* Ethical comparison mocks in print */
+  .ethical-comparison-wrap {
+    border-top: 1px dashed #ccc !important;
+    margin-top: 8pt !important;
+    padding-top: 8pt !important;
+  }
+
+  .comparison-card {
+    border: 1px solid #ddd !important;
+    background: #fdfdfd !important;
+    page-break-inside: avoid;
+  }
+
+  .comparison-card.dark {
+    border-color: #FF4D1C !important;
+  }
+
+  .comparison-card.ethical {
+    border-color: #7BD389 !important;
+  }
+
+  .comparison-tag.dark {
+    color: #FF4D1C !important;
+    background: #fff0eb !important;
+  }
+
+  .comparison-tag.ethical {
+    color: #2b7a37 !important;
+    background: #ebfbee !important;
+  }
+
+  .mock-ui {
+    background: #f5f5f5 !important;
+    border: 1px solid #ccc !important;
+    color: #000 !important;
+  }
+
+  .site-footer {
+    border-top: 1px solid #ccc !important;
+    margin-top: 24pt !important;
+    padding: 12pt 0 !important;
+    page-break-inside: avoid;
+  }
+
+  .badge-model::before {
+    background: #FF8A3D !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .quote-block {
+    border-left: 3px solid #FF8A3D !important;
+    background: #f9f9f9 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

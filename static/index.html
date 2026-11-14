@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CheekShield AI — Dark Pattern & Deceptive UI Auditor</title>
+  <meta name="description" content="Audit e-commerce checkouts and interfaces for dark patterns with genuine ML and evidence-backed explainability.">
+
+  <!-- Self-hosted CSS -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/print.css" media="print">
+</head>
+<body>
+  <!-- Animated Peach Field Background (Section 6.10) -->
+  <canvas id="peachfield" aria-hidden="true"></canvas>
+
+  <!-- Inline SVG Sprite for Offline Zero-Dependency Icons -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display: none;" aria-hidden="true">
+    <defs>
+      <g id="glyph-urgency" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="10" cy="10" r="7.5" />
+        <polyline points="10 6 10 10 13 12" />
+      </g>
+      <g id="glyph-scarcity" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 4h10 M5 16h10 M6 4c0 4 4 6 4 6s4-2 4-6 M6 16c0-4 4-6 4-6s4 2 4 6" />
+      </g>
+      <g id="glyph-social-proof" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 16v-1.5a2.5 2.5 0 0 0-2.5-2.5h-5A2.5 2.5 0 0 0 3 14.5V16" />
+        <circle cx="8" cy="6.5" r="2.5" />
+        <path d="M17 15v-1a2 2 0 0 0-1.5-1.9 M13.5 4.1a2 2 0 0 1 0 3.8" />
+      </g>
+      <g id="glyph-misdirection" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="13 4 17 4 17 8" />
+        <path d="M17 4l-7 7" />
+        <polyline points="3 11 3 16 8 16" />
+        <path d="M3 16l6-6" />
+      </g>
+      <g id="glyph-preselected-choice" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3.5" y="3.5" width="13" height="13" rx="2.5" />
+        <polyline points="7 10 9 12.5 13.5 7.5" />
+      </g>
+      <g id="glyph-disguised-ad" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16.5 9.5l-6-6H4v6.5l6 6 6.5-6.5z" />
+        <circle cx="7" cy="7" r="1" fill="currentColor" />
+      </g>
+      <g id="glyph-other" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="10 3 17 16 3 16" />
+        <line x1="10" y1="8" x2="10" y2="11.5" />
+        <circle cx="10" cy="13.5" r="0.75" fill="currentColor" />
+      </g>
+      <g id="glyph-fallback" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="10" cy="10" r="7.5" />
+        <path d="M8 8a2 2 0 1 1 3 1.7c-.5.4-.9.9-.9 1.8" />
+        <circle cx="10" cy="14" r="0.75" fill="currentColor" />
+      </g>
+      <g id="glyph-leaf-tick" viewBox="0 0 20 20" fill="none" stroke="#7BD389" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 10.5l3.5 3.5 7-8" />
+      </g>
+      <g id="glyph-upload" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 13V3m0 0L6.5 6.5M10 3l3.5 3.5" />
+        <path d="M3.5 13v2.5a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5V13" />
+      </g>
+      <g id="glyph-close" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+        <line x1="5" y1="5" x2="15" y2="15" />
+        <line x1="15" y1="5" x2="5" y2="15" />
+      </g>
+    </defs>
+  </svg>
+
+  <div class="app-shell">
+    <!-- Header -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <a href="/" class="logo-link" aria-label="CheekShield AI Home">
+          <img src="assets/logo.svg" alt="CheekShield AI" class="logo-img" width="180" height="38">
+        </a>
+        <div class="header-meta">
+          <div id="model-status-chip" class="status-chip warming" role="status" aria-live="polite">
+            <span class="status-dot"></span>
+            <span id="model-status-text">Checking model...</span>
+          </div>
+          <a href="#how-it-works" class="nav-link">How it works</a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+      <!-- Hero Section -->
+      <section class="hero-section" aria-label="Dark pattern scanner">
+        <div class="container hero-grid">
+          <!-- Input Column (~58%) -->
+          <div class="hero-input-col">
+            <h1 class="hero-tagline">Cheeko checks the softspots.</h1>
+
+            <!-- Input Slab (Peach-leaf radius) -->
+            <div class="input-slab">
+              <!-- Segmented Tabs -->
+              <div class="tab-list" role="tablist" aria-label="Input formats">
+                <button role="tab" id="tab-text" class="tab-btn" aria-selected="true" aria-controls="panel-text" tabindex="0">
+                  Text
+                </button>
+                <button role="tab" id="tab-html" class="tab-btn" aria-selected="false" aria-controls="panel-html" tabindex="-1">
+                  HTML
+                </button>
+                <button role="tab" id="tab-screenshot" class="tab-btn" aria-selected="false" aria-controls="panel-screenshot" tabindex="-1">
+                  Screenshot
+                </button>
+              </div>
+
+              <!-- Tab Panel: Text -->
+              <div id="panel-text" class="tab-panel" role="tabpanel" aria-labelledby="tab-text">
+                <label for="text-input" class="sr-only">Pasted checkout text</label>
+                <textarea
+                  id="text-input"
+                  class="input-textarea"
+                  placeholder="Paste checkout text, a popup, or product-page copy."
+                  maxlength="20000"
+                  aria-describedby="text-meta"
+                ></textarea>
+                <div class="slab-footer" id="text-meta">
+                  <div class="slab-meta">
+                    <span id="text-char-count">0 / 20,000 chars</span>
+                    <span id="text-line-count">0 lines</span>
+                  </div>
+                  <button type="button" id="text-clear-btn" class="btn-clear" aria-label="Clear text input">Clear</button>
+                </div>
+              </div>
+
+              <!-- Tab Panel: HTML -->
+              <div id="panel-html" class="tab-panel" role="tabpanel" aria-labelledby="tab-html" hidden>
+                <div class="file-upload-bar">
+                  <label class="file-label-btn" for="html-file-input">
+                    <svg class="icon"><use href="#glyph-upload" /></svg>
+                    <span>Upload .html</span>
+                  </label>
+                  <input type="file" id="html-file-input" accept=".html,.htm" class="sr-only">
+                  <span id="html-filename" class="file-chosen-name">No file selected</span>
+                </div>
+                <label for="html-input" class="sr-only">HTML markup</label>
+                <textarea
+                  id="html-input"
+                  class="input-textarea font-mono"
+                  placeholder="Paste raw checkout HTML or page DOM source."
+                  aria-describedby="html-meta"
+                ></textarea>
+                <div class="slab-footer" id="html-meta">
+                  <div class="slab-meta">
+                    <span id="html-size-count">0 / 400 KB</span>
+                  </div>
+                  <button type="button" id="html-clear-btn" class="btn-clear" aria-label="Clear HTML input">Clear</button>
+                </div>
+              </div>
+
+              <!-- Tab Panel: Screenshot -->
+              <div id="panel-screenshot" class="tab-panel" role="tabpanel" aria-labelledby="tab-screenshot" hidden>
+                <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Drop screenshot image here or click to choose">
+                  <svg class="icon dropzone-icon"><use href="#glyph-upload" /></svg>
+                  <div class="dropzone-text">Drop a screenshot here, paste with <kbd>Ctrl+V</kbd>, or click to browse</div>
+                  <div class="dropzone-sub">PNG, JPEG, WEBP up to 8 MB</div>
+                  <input type="file" id="screenshot-file-input" accept="image/png,image/jpeg,image/webp" class="sr-only">
+                </div>
+
+                <div id="screenshot-preview" class="screenshot-preview" hidden>
+                  <img id="preview-img" src="" alt="Screenshot thumbnail" class="preview-thumb">
+                  <div class="preview-info">
+                    <span id="preview-name" class="preview-name">image.png</span>
+                    <span id="preview-size" class="preview-size">1.2 MB</span>
+                  </div>
+                  <button type="button" id="remove-screenshot-btn" class="btn-clear" aria-label="Remove image">
+                    <svg class="icon"><use href="#glyph-close" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Row -->
+            <div class="action-row">
+              <div class="action-left">
+                <!-- Audit Button with Cleft Notch -->
+                <button type="button" id="btn-audit" class="btn-audit" disabled title="Add something to audit">
+                  <span class="audit-wave" aria-hidden="true"></span>
+                  <span class="btn-label" id="btn-audit-label">Audit</span>
+                </button>
+                <button type="button" id="btn-cancel" class="btn-cancel" hidden>Cancel</button>
+              </div>
+
+              <!-- Sample Buttons -->
+              <div class="samples-bar">
+                <span>Try sample:</span>
+                <button type="button" id="sample-deceptive-btn" class="sample-link">Deceptive</button>
+                <span>/</span>
+                <button type="button" id="sample-clean-btn" class="sample-link">Clean</button>
+              </div>
+            </div>
+
+            <!-- Input Error Banner (Section 10) -->
+            <div id="input-error-banner" class="input-error-banner" hidden role="alert">
+              <span id="input-error-text"></span>
+            </div>
+          </div>
+
+          <!-- Cheekometer Column (~42%) -->
+          <div class="hero-meter-col">
+            <div class="meter-wrapper" id="meter-card">
+              <!-- Peach SVG Container (Clickable Easter egg) -->
+              <div class="meter-svg-container" id="meter-svg-box" role="meter" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Cheekometer Exposure Level: 0 percent (Fresh)">
+                <svg id="meter-svg" class="meter-svg" viewBox="0 0 240 280">
+                  <defs>
+                    <!-- Clip path for fluid -->
+                    <clipPath id="peach-clip">
+                      <path d="M120 44 C 80 20, 18 48, 18 128 C 18 196, 66 252, 120 252 C 174 252, 222 196, 222 128 C 222 48, 160 20, 120 44 Z" />
+                    </clipPath>
+                    <!-- Vertical fluid gradient -->
+                    <linearGradient id="fluid-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stop-color="#FFB784" />
+                      <stop offset="50%" stop-color="#FF8A3D" />
+                      <stop offset="100%" stop-color="#FF4D1C" />
+                    </linearGradient>
+                  </defs>
+
+                  <!-- Fluid layer (clipped) -->
+                  <g clip-path="url(#peach-clip)">
+                    <!-- Background when empty/glass -->
+                    <rect x="0" y="0" width="240" height="280" fill="#0B0B0B" />
+                    <!-- Animated fluid paths injected here by meter.js -->
+                    <g id="meter-fluid-group">
+                      <path id="meter-wave-back" fill="#FF8A3D" opacity="0.5" d="M 0 280 L 240 280 Z" />
+                      <path id="meter-wave-front" fill="url(#fluid-grad)" d="M 0 280 L 240 280 Z" />
+                    </g>
+                  </g>
+
+                  <!-- Peach outline (dashed in idle, solid on result) -->
+                  <path
+                    id="meter-peach-outline"
+                    d="M120 44 C 80 20, 18 48, 18 128 C 18 196, 66 252, 120 252 C 174 252, 222 196, 222 128 C 222 48, 160 20, 120 44 Z"
+                    fill="none"
+                    stroke="#FF8A3D"
+                    stroke-width="2.5"
+                    stroke-dasharray="6 5"
+                  />
+
+                  <!-- Measuring glass scale ticks on right edge -->
+                  <g id="meter-scale-ticks" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" font-family="system-ui, sans-serif" font-size="8" fill="rgba(255,255,255,0.5)">
+                    <line x1="216" y1="230" x2="226" y2="230" /><text x="228" y="233">0</text>
+                    <line x1="220" y1="185" x2="228" y2="185" /><text x="230" y="188">25</text>
+                    <line x1="220" y1="140" x2="228" y2="140" /><text x="230" y="143">50</text>
+                    <line x1="216" y1="95" x2="226" y2="95" /><text x="228" y="98">75</text>
+                    <line x1="200" y1="55" x2="210" y2="55" /><text x="212" y="58">100</text>
+                  </g>
+
+                  <!-- Cleft Line (above fluid, 45% white) -->
+                  <path
+                    id="meter-cleft"
+                    d="M120 44 C 122 80, 116 160, 110 236 C 108 244, 102 248, 96 248"
+                    fill="none"
+                    stroke="#FFFFFF"
+                    stroke-width="1.75"
+                    stroke-linecap="round"
+                    opacity="0.45"
+                  />
+
+                  <!-- Stem and Leaf (Leaf is #7BD389) -->
+                  <path d="M120 44 C 122 25, 116 12, 112 6" fill="none" stroke="#7BD389" stroke-width="2" stroke-linecap="round" />
+                  <path d="M122 28 C 132 10, 154 12, 160 22 C 160 28, 142 34, 122 28 Z" fill="#7BD389" />
+
+                  <!-- Gloss Arc at upper left (white ~18%) -->
+                  <path d="M50 80 C 40 100, 38 128, 42 150" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" opacity="0.18" />
+
+                  <!-- Clean state tick (hidden by default) -->
+                  <g id="meter-clean-tick" opacity="0">
+                    <circle cx="120" cy="148" r="24" fill="#0B0B0B" stroke="#7BD389" stroke-width="2" />
+                    <path d="M110 148 l7 7 l14 -14" fill="none" stroke="#7BD389" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                  </g>
+                </svg>
+              </div>
+
+              <!-- Meter Data Side (Number, Band, Explainer) -->
+              <div class="meter-data">
+                <div class="meter-number-row">
+                  <span id="meter-number" class="meter-number">&ndash;</span>
+                  <span id="meter-percent-sign" class="meter-percent-sign" hidden>%</span>
+                </div>
+                <div id="meter-band" class="meter-band">Idle</div>
+                <p id="meter-explainer" class="meter-explainer">Paste text, HTML, or an image to measure manipulative pressure.</p>
+                <button type="button" id="meter-calc-toggle" class="meter-calc-link" aria-expanded="false" aria-controls="calc-popover">
+                  How is this calculated?
+                </button>
+              </div>
+
+              <!-- Calculation Popover (Section 7 Phase 3) -->
+              <div id="calc-popover" class="calc-popover" hidden>
+                <p>The Cheekometer adds up how much pressure the page puts on a shopper. Every flagged item counts by its risk and by how sure the check is. It rises quickly with the first few findings, then levels off.</p>
+                <p style="margin-top: 6px;">Both DistilBERT model predictions and rule-based checks contribute. It is an index for comparing pages, not the probability that anything is illegal.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live region for screen readers (Section 7 Phase 3) -->
+      <div id="a11y-status" class="sr-only" role="status" aria-live="polite"></div>
+
+      <!-- Results Section (Reveals after audit) -->
+      <section id="results-section" class="results-section" aria-label="Audit findings" hidden>
+        <div class="container results-grid">
+          <!-- Left Column: Receipt Tally Strip -->
+          <div class="results-tally-col">
+            <div id="receipt-strip" class="receipt-strip" aria-label="CheekShield Audit Receipt">
+              <div class="receipt-top-band" aria-hidden="true"></div>
+              <div class="receipt-body">
+                <div class="receipt-header">
+                  <img src="assets/logo.svg" alt="" class="receipt-logo" width="22" height="22">
+                  <h3 class="receipt-title">CheekShield audit</h3>
+                </div>
+                <div class="receipt-row receipt-table-header">
+                  <span class="col-item">Item</span>
+                  <span class="leader" aria-hidden="true"></span>
+                  <span class="col-qty">Qty</span>
+                  <span class="col-risk">Risk</span>
+                </div>
+                <hr class="receipt-divider">
+
+                <!-- Dynamic rows injected here -->
+                <div id="receipt-category-rows"></div>
+
+                <hr class="receipt-divider">
+                <div class="receipt-row">
+                  <span class="col-item">Flagged</span>
+                  <span class="leader" aria-hidden="true"></span>
+                  <span id="receipt-flagged-count" class="receipt-num">0</span>
+                </div>
+                <div class="receipt-row">
+                  <span class="col-item">Checked &amp; fine</span>
+                  <span class="leader" aria-hidden="true"></span>
+                  <span id="receipt-checked-count" class="receipt-num">0</span>
+                </div>
+                <div class="receipt-row">
+                  <span class="col-item">Routine pre-selections</span>
+                  <span class="leader" aria-hidden="true"></span>
+                  <span id="receipt-routine-count" class="receipt-num">0</span>
+                </div>
+                <div class="receipt-row">
+                  <span class="col-item">Highest risk</span>
+                  <span class="leader" aria-hidden="true"></span>
+                  <span id="receipt-highest-risk" class="receipt-num">—</span>
+                </div>
+                <div class="receipt-row">
+                  <span class="col-item">Input mode</span>
+                  <span class="leader" aria-hidden="true"></span>
+                  <span id="receipt-input-mode" class="receipt-num">Text</span>
+                </div>
+                <div class="receipt-row">
+                  <span class="col-item">Analysis time</span>
+                  <span class="leader" aria-hidden="true"></span>
+                  <span id="receipt-elapsed-time" class="receipt-num">—</span>
+                </div>
+
+                <!-- Cheekometer Total Block -->
+                <div class="receipt-total-block">
+                  <div class="receipt-total-header">
+                    <span class="receipt-total-label">Cheekometer</span>
+                    <span id="receipt-exposure-val" class="receipt-total-number">0%</span>
+                  </div>
+                  <div id="receipt-exposure-band" class="receipt-total-band">Fresh</div>
+                  <div class="receipt-gauge-track" aria-hidden="true">
+                    <div id="receipt-gauge-fill" class="receipt-gauge-fill" style="width: 0%;"></div>
+                  </div>
+                </div>
+
+                <!-- Disclaimer Stamp -->
+                <div class="receipt-stamp-container">
+                  <div class="receipt-stamp">Not a legal finding.</div>
+                </div>
+
+                <!-- Receipt Export Actions -->
+                <div class="receipt-actions">
+                  <button type="button" id="download-json-btn" class="receipt-btn receipt-btn-primary">Download JSON</button>
+                  <div class="receipt-actions-sub">
+                    <button type="button" id="save-pdf-btn" class="receipt-btn receipt-btn-secondary">Save as PDF</button>
+                    <button type="button" id="copy-summary-btn" class="receipt-btn receipt-btn-secondary">Copy summary</button>
+                  </div>
+                </div>
+                <div class="receipt-export-options" id="export-options">
+                  <label class="receipt-checkbox-label">
+                    <input type="checkbox" id="export-include-image" class="custom-receipt-checkbox" checked>
+                    <span>Include image in JSON</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Evidence & Viewer -->
+          <div class="results-evidence-col">
+            <!-- Screenshot Viewer (when mode == screenshot) -->
+            <div id="screenshot-viewer-container" class="screenshot-viewer-container" hidden>
+              <!-- Populated by viewer.js in Phase 4 -->
+            </div>
+
+            <!-- Evidence Header & Controls -->
+            <div class="evidence-header">
+              <h2 class="evidence-title">What we found</h2>
+              <div class="evidence-controls">
+                <label for="evidence-filter" class="sr-only">Filter by source</label>
+                <select id="evidence-filter" class="filter-select">
+                  <option value="all">All evidence</option>
+                  <option value="model">Model only</option>
+                  <option value="rule">Rule only</option>
+                </select>
+
+                <label for="evidence-sort" class="sr-only">Sort findings</label>
+                <select id="evidence-sort" class="sort-select">
+                  <option value="risk">Sort by risk (High → Low)</option>
+                  <option value="position">Sort by position</option>
+                  <option value="score">Sort by confidence</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Category Filter Chips (Section 7 Phase 4) -->
+            <div id="evidence-category-chips" class="category-chips-bar" hidden></div>
+
+            <!-- Flagged Findings List -->
+            <div id="evidence-list" class="evidence-list"></div>
+
+            <!-- Routine Pre-selections (Muted, visible) -->
+            <div id="routine-preselections-group" class="routine-group" hidden>
+              <h3 style="font-size: 14px; color: var(--white-dim); margin-bottom: 8px;">Routine pre-selections (Benign convenience)</h3>
+              <div id="routine-list" class="evidence-list"></div>
+            </div>
+
+            <!-- Checked & Fine (Collapsed details) -->
+            <details id="checked-fine-details" class="checked-details" hidden>
+              <summary id="checked-fine-summary" style="cursor: pointer; padding: 10px; background: var(--ink-1); border: 1px solid var(--hairline); border-radius: var(--radius-sm); font-size: 13px; color: var(--white-dim);">
+                Checked and fine (0)
+              </summary>
+              <div id="checked-fine-list" class="evidence-list" style="margin-top: 10px;"></div>
+            </details>
+
+            <!-- Clean State Display (Mandatory Section 7 Phase 4) -->
+            <div id="clean-state-box" class="clean-state-box" hidden>
+              <div class="clean-icon-wrap">
+                <svg class="icon" style="width: 28px; height: 28px;"><use href="#glyph-leaf-tick" /></svg>
+              </div>
+              <h3 class="clean-title">Fresh. No manipulation found.</h3>
+              <p class="clean-sub">
+                No deceptive patterns, countdown pressure, or hidden add-ons were detected in this input.
+                This is not a guarantee. Hidden checkout steps and dynamic backend pricing cannot be seen from this snippet.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Model Panel Section ("How good is it?" Section 7 Phase 5) -->
+      <section id="how-it-works" class="model-section" aria-label="Model evaluation">
+        <div class="container model-panel">
+          <div class="model-header">
+            <div>
+              <h2 class="model-title">How good is it?</h2>
+              <p style="font-size: 14px; color: var(--white-dim); margin-top: 4px;">
+                Trained DistilBERT sequence classifier + DOM heuristic rule engine. Confidence is temperature-calibrated (<span id="meta-temp">T = 1.8</span>).
+              </p>
+            </div>
+            <div id="model-chip-badge" style="font-size: 12px; color: var(--white-faint);">
+              DistilBERT Base Uncased
+            </div>
+          </div>
+
+          <!-- Headline Metrics Cards -->
+          <div class="model-metrics-grid">
+            <div class="metric-card">
+              <span class="metric-card-label">Macro F1 Score</span>
+              <span id="metric-macro-f1" class="metric-card-val">—</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-card-label">Dark-vs-Benign Precision</span>
+              <span id="metric-binary-precision" class="metric-card-val">—</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-card-label">Dark-vs-Benign Recall</span>
+              <span id="metric-binary-recall" class="metric-card-val">—</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-card-label">Dark-vs-Benign F1</span>
+              <span id="metric-binary-f1" class="metric-card-val">—</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-card-label">Dark Threshold</span>
+              <span id="metric-dark-threshold" class="metric-card-val">—</span>
+            </div>
+          </div>
+
+          <!-- Per-Class Metrics Table -->
+          <div>
+            <h3 style="font-size: 16px; margin-bottom: 8px;">Per-class test set evaluation</h3>
+            <div class="matrix-container">
+              <table class="matrix-table" id="per-class-table">
+                <thead>
+                  <tr>
+                    <th style="text-align: left;">Category</th>
+                    <th>Precision</th>
+                    <th>Recall</th>
+                    <th>F1-Score</th>
+                    <th>Test Support</th>
+                  </tr>
+                </thead>
+                <tbody id="per-class-tbody">
+                  <!-- Injected by model-panel.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Confusion Matrix Heatmap -->
+          <div>
+            <h3 style="font-size: 16px; margin-bottom: 8px;">Confusion matrix (Rows = True class, Columns = Predicted)</h3>
+            <div class="matrix-container" id="confusion-matrix-box">
+              <!-- Rendered dynamically by model-panel.js -->
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer (Section 2 Rule G, H; Section 6.5) -->
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p class="footer-disclaimer">
+          <strong>Assistive indication:</strong> Outputs are assistive indications of potentially deceptive design, not legal findings. Every flagged item warrants human review.
+        </p>
+        <p class="footer-privacy">
+          <strong>Privacy guarantee:</strong> All analysis is processed entirely in memory. Uploaded text, HTML, and screenshots are never written to disk, never logged, and never shared. Zero cookies, zero trackers.
+        </p>
+        <div class="footer-bottom">
+          <span>CheekShield AI &bull; TECHNOVUS, AAYAM XI, NIT Agartala</span>
+          <span id="footer-model-version">Model: DistilBERT (Fine-tuned)</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Entry Script (ES Modules, Zero Build Step) -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

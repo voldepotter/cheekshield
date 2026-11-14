@@ -1,0 +1,50 @@
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+*.local
+
+# Temp, logs and scratch (agent browser profiles, debug logs)
+temp*chrome*/
+temp_p7_*/
+tmp/
+temp/
+*.log
+scratch/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Model weights and large binaries (too large for git)
+outputs/model/*.safetensors
+outputs/model/*.bin
+outputs/model/*.pt
+outputs/model/*.pth
+outputs/model/*.onnx
+outputs/model/*.ckpt
+outputs/model/checkpoint-*/
+*.ckpt
+
+# Keep trackable model metadata and placeholder
+!outputs/model/.gitkeep
+!outputs/model/meta.json
+!outputs/model/test_errors.csv
+
+instructions and guide/

@@ -1,0 +1,21 @@
+# CheekShield AI — core
+flask>=3.0
+
+# ML engine dependencies
+torch>=2.0
+transformers>=4.30
+safetensors>=0.4
+scikit-learn>=1.3
+pandas>=2.0
+numpy>=1.24
+
+# Image / OCR
+opencv-python-headless>=4.8
+easyocr>=1.7
+Pillow>=10.0
+
+# HTML parsing
+beautifulsoup4>=4.12
+
+# Testing
+pytest>=7.4
