@@ -7,7 +7,7 @@ import { fetchSamples, postAnalyze } from './api.js';
 
 const LIMITS = {
   textMaxChars: 20000,
-  htmlMaxBytes: 400 * 1024, // 400 KB
+  htmlMaxBytes: 4 * 1024 * 1024, // 400 KB
   imageMaxBytes: 8 * 1024 * 1024, // 8 MB
   allowedImageTypes: ['image/png', 'image/jpeg', 'image/webp'],
 };

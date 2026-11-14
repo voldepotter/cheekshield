@@ -173,6 +173,20 @@ def api_samples():
 
     return jsonify(samples)
 
+from bs4 import BeautifulSoup, Comment
+
+def _slim_html(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "svg", "noscript", "iframe", "canvas", "template"]):
+        tag.decompose()
+    for c in soup.find_all(string=lambda s: isinstance(s, Comment)):
+        c.extract()
+    for el in soup.find_all(["img", "source"]):
+        for attr in ("src", "srcset"):
+            if str(el.get(attr, "")).startswith("data:"):
+                del el[attr]
+    return str(soup)
+
 
 @app.route("/api/analyze", methods=["POST"])
 def api_analyze():
@@ -232,6 +246,8 @@ def api_analyze():
 
     # Run analysis
     try:
+        if mode == "html":
+            content = _slim_html(content)
         result = engine_adapter.analyze(mode, content)
         return jsonify(result)
     except RuntimeError as exc:
@@ -447,7 +463,7 @@ if __name__ == "__main__":
     log_startup_banner()
     engine_adapter.start_warmup()
     app.run(
-        host="0.0.0.0",
+        host="0.0.0.0",  
         port=int(os.environ.get("PORT", 5000)),
         debug=os.environ.get("FLASK_DEBUG", "0") == "1",
         threaded=True,

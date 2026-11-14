@@ -19,7 +19,7 @@ def __getattr__(name):
 
 # -- Input limits --
 MAX_TEXT_CHARS = 20_000
-MAX_HTML_BYTES = 400 * 1024          # 400 KB
+MAX_HTML_BYTES = 4 * 1024 * 1024          # 400 KB
 MAX_IMAGE_BYTES = 8 * 1024 * 1024    # 8 MB
 MAX_CONTENT_LENGTH = MAX_IMAGE_BYTES + 4096  # Flask overall limit with overhead
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
