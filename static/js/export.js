@@ -87,10 +87,11 @@ export class ExportController {
       return;
     }
 
-    const exposure = currentResult.exposure || {};
     const summary = currentResult.summary || {};
     const findings = currentResult.findings || [];
     const flagged = findings.filter((f) => f.kind === 'flag');
+    const isFlagged = (summary.flagged_items ?? flagged.length) > 0;
+    const statusText = isFlagged ? 'Soft spots detected' : 'Fresh';
 
     // Build category summary
     const catCounts = {};
@@ -103,7 +104,7 @@ export class ExportController {
 
     const text = [
       '--- CHEEKSHIELD AI AUDIT SUMMARY ---',
-      `Cheekometer Exposure: ${exposure.percent ?? 0}% (${exposure.label || 'Fresh'})`,
+      `Status: ${statusText}`,
       `Flagged dark patterns: ${summary.flagged_items ?? flagged.length}`,
       `Highest risk tier: ${summary.overall_risk || 'None'}`,
       `Checked & fine items: ${summary.checked_fine ?? 0}`,

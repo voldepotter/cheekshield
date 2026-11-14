@@ -1,19 +1,14 @@
 /**
- * CheekShield AI — Cheekometer Controller (Section 7 Phase 3)
+ * CheekShield AI — Peach Outcome Controller
  *
- * States: idle, analyzing, result, clean, error
+ * Implements the two-outcome peach indicator:
+ *  - Nothing detected: peach stays empty, checkmark tick, side text "Fresh"
+ *  - Anything detected: peach fills slowly over 3.2s to the very top (covering
+ *    every pixel including both upper lobes beside the cleft dip), then runs
+ *    a gentle breathing pulse loop in a slightly reddish tone, with side text
+ *    "Soft spots detected" and sub-line "Review each finding below."
  *
- * The SVG peach is already in index.html. This module drives:
- *  - Fluid wave animation (two sinusoidal paths clipped to peach shape)
- *  - Spring physics for fluid level with overshoot
- *  - Juice streaks and bubbles inside the fluid
- *  - Number count-up animation (easeOutCubic)
- *  - Band label fade-in
- *  - ARIA meter updates & live region announcements
- *  - Easter egg wobble on click
- *  - Calculation popover toggle
- *  - Loading message rotation
- *  - Reduced motion support
+ * Fully respects prefers-reduced-motion: reduce (static render, no fill/wave/pulse).
  */
 
 const LOADING_MESSAGES = [
@@ -23,83 +18,101 @@ const LOADING_MESSAGES = [
   'Weighing the evidence',
 ];
 
-// SVG coordinate system: viewBox 0 0 240 280
-// Peach body spans roughly Y=44 (top dip) to Y=252 (bottom)
-const PEACH_TOP = 44;
-const PEACH_BOTTOM = 252;
-const PEACH_RANGE = PEACH_BOTTOM - PEACH_TOP; // 208
+// SVG viewBox 0 0 240 280
+// Peach shape:
+//  - Top cleft dip at Y=44
+//  - Upper lobes peak at Y≈22-24
+//  - Bottom tip at Y=252
+// Full level must sit above topmost lobe so every pixel is covered
+const PEACH_FULL_Y = 10;
+const PEACH_EMPTY_Y = 256;
+const FILL_DURATION_MS = 3200; // 3.2s ease-in-out fill
+const DRAIN_DURATION_MS = 800; // 0.8s drain for clean
+const PULSE_PERIOD_MS = 2400;  // 2.4s breathing loop
 
-// Convert percent (0-100) to Y coordinate in SVG space
-function percentToY(pct) {
-  // 0% → bottom (252), 100% → top (44)
-  return PEACH_BOTTOM - (pct / 100) * PEACH_RANGE;
+// Single helper for the outcome:
+// response.summary.flagged_items > 0
+export function isFlagged(response) {
+  if (!response) return false;
+  const flagged = response.summary?.flagged_items;
+  if (typeof flagged === 'number') {
+    return flagged > 0;
+  }
+  const findings = response.findings || [];
+  return findings.some((f) => f.kind === 'flag');
 }
 
-// easeOutCubic for count-up
-function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3);
-}
-
-// Check reduced motion preference
 function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// Blend between --peach (#FF8A3D) and --peach-hot (#FF4D1C)
+// ratio = 0 -> #FF8A3D (rgb 255, 138, 61)
+// ratio = 1 -> #FF4D1C (rgb 255, 77, 28)
+function blendPeachHot(ratio) {
+  const r = Math.max(0, Math.min(1, ratio));
+  const g = Math.round(138 - 61 * r);
+  const b = Math.round(61 - 33 * r);
+  return `rgb(255, ${g}, ${b})`;
 }
 
 export class MeterController {
   constructor() {
     // DOM elements
     this.svgBox = document.getElementById('meter-svg-box');
+    this.svgEl = document.getElementById('meter-svg');
     this.waveFront = document.getElementById('meter-wave-front');
     this.waveBack = document.getElementById('meter-wave-back');
     this.fluidGroup = document.getElementById('meter-fluid-group');
     this.peachOutline = document.getElementById('meter-peach-outline');
     this.cleanTick = document.getElementById('meter-clean-tick');
-    this.numberEl = document.getElementById('meter-number');
-    this.percentSign = document.getElementById('meter-percent-sign');
     this.bandEl = document.getElementById('meter-band');
     this.explainerEl = document.getElementById('meter-explainer');
-    this.calcToggle = document.getElementById('meter-calc-toggle');
-    this.calcPopover = document.getElementById('calc-popover');
     this.a11yStatus = document.getElementById('a11y-status');
 
-    // State
-    this.state = 'idle'; // idle | analyzing | result | clean | error
-    this.targetPercent = 0;
-    this.currentLevel = 0; // current Y percent (0-100), animated
-    this.velocity = 0; // spring velocity
-    this.displayNumber = 0; // currently displayed integer
-    this.targetNumber = 0;
+    // Gradient stops in SVG defs
+    this.gradientStops = document.querySelectorAll('#fluid-grad stop');
+
+    // State: 'idle' | 'analyzing' | 'flagged' | 'clean' | 'error'
+    this.state = 'idle';
+
+    // Fluid level (Y coordinate in SVG space: 10 = full, 256 = empty)
+    this.currentY = PEACH_EMPTY_Y;
+    this.targetY = PEACH_EMPTY_Y;
+
+    // Fill animation state (flagged)
+    this.fillStartTime = 0;
+    this.fillStartY = PEACH_EMPTY_Y;
+    this.isFilling = false;
+    this.waveAmplitudeStart = 6;
+
+    // Drain animation state (clean)
+    this.drainStartTime = 0;
+    this.drainStartY = PEACH_EMPTY_Y;
+    this.isDraining = false;
+
+    // Pulse loop state (after fill completes)
+    this.isPulsing = false;
+    this.pulseStartTime = 0;
 
     // Wave parameters
     this.wavePhase = 0;
-    this.waveAmplitude = 6; // base amplitude
-    this.waveAmplitudeTarget = 6;
-    this.sloshing = false;
-    this.sloshDecay = 0;
-
-    // Idle bob
+    this.waveAmplitude = 4;
     this.bobPhase = 0;
+
+    // Analyzing slosh
+    this.analyzePhase = 0;
 
     // Loading message rotation
     this.loadingMsgIndex = 0;
     this.loadingMsgTimer = null;
-
-    // Analyzing slosh range
-    this.analyzePhase = 0;
-
-    // Count-up animation
-    this.countStartTime = 0;
-    this.countDuration = 1200; // 1.2s
-    this.countFrom = 0;
-    this.countTo = 0;
-    this.isCounting = false;
 
     // Animation frame
     this.animFrame = null;
     this.lastTime = 0;
     this.running = false;
 
-    // Bubbles
+    // Decorative juice elements
     this.bubbles = [];
     this.streaks = [];
 
@@ -110,15 +123,6 @@ export class MeterController {
     // Easter egg: wobble on click
     if (this.svgBox) {
       this.svgBox.addEventListener('click', () => this.wobble());
-    }
-
-    // Calculation popover toggle
-    if (this.calcToggle && this.calcPopover) {
-      this.calcToggle.addEventListener('click', () => {
-        const expanded = this.calcToggle.getAttribute('aria-expanded') === 'true';
-        this.calcToggle.setAttribute('aria-expanded', String(!expanded));
-        this.calcPopover.hidden = expanded;
-      });
     }
 
     // Listen for audit lifecycle events
@@ -135,9 +139,8 @@ export class MeterController {
       }
     });
 
-    // Initialize streaks (static decorative lines inside the fluid)
+    // Initialize streaks and bubbles
     this.initStreaks();
-    // Initialize bubbles pool
     this.initBubbles();
 
     // Start in idle
@@ -166,94 +169,143 @@ export class MeterController {
   tick(now) {
     if (!this.running) return;
 
-    let elapsed = Math.min(Math.max(0, (now - this.lastTime) / 1000), 2.0); // max catch-up 2s
+    const dt = Math.min(Math.max(0, (now - this.lastTime) / 1000), 0.05);
     this.lastTime = now;
 
     if (prefersReducedMotion()) {
-      // Static render, no animation
-      this.currentLevel = this.targetPercent;
-      this.displayNumber = this.targetNumber;
-      this.renderWaves(0);
-      this.renderNumber();
+      this.renderReducedMotion();
     } else {
-      // Fixed-timestep physics simulation for frame-rate independence
-      const step = 1 / 60;
-      while (elapsed > 0) {
-        const subDt = Math.min(elapsed, step);
-        this.updatePhysics(subDt);
-        this.updateBubbles(subDt);
-        elapsed -= subDt;
-      }
-
-      const dt = Math.min((now - this.lastTime) / 1000, 0.05);
-      this.wavePhase += (now / 1000) * 2.2;
-      this.bobPhase = now / 1000;
-      this.renderWaves(dt);
-      this.updateCountUp();
-      this.renderNumber();
+      this.updateStateLogic(now, dt);
+      this.updateBubbles(dt);
+      this.wavePhase += dt * 2.5;
+      this.bobPhase += dt;
+      this.renderWaves();
     }
 
     this.animFrame = requestAnimationFrame((t) => this.tick(t));
   }
 
   // =====================================================================
-  // Spring Physics — fluid level eases to target with slight overshoot
+  // State Logic & Physics Updates
   // =====================================================================
-  updatePhysics(dt) {
+  updateStateLogic(now, dt) {
     if (this.state === 'analyzing') {
-      // Indeterminate slosh between ~15% and ~35%
-      this.analyzePhase += dt * 1.3;
-      this.targetPercent = 25 + 10 * Math.sin(this.analyzePhase);
+      // Indeterminate slosh between Y ≈ 165 and Y ≈ 205
+      this.analyzePhase += dt * 1.6;
+      const sloshTarget = 185 + 20 * Math.sin(this.analyzePhase);
+      // Smoothly ease currentY from wherever it started to the slosh target
+      this.currentY += (sloshTarget - this.currentY) * Math.min(1, dt * 3.5);
+      this.waveAmplitude = 9;
+      this.resetGradientToNormal();
+      return;
     }
 
-    // Spring: stiffness and damping (snappy fill ~600ms with slight overshoot)
-    const stiffness = 28.0;
-    const damping = 6.5;
-    const diff = this.targetPercent - this.currentLevel;
-    const springForce = diff * stiffness;
-    const dampForce = -this.velocity * damping;
-    this.velocity += (springForce + dampForce) * dt;
-    this.currentLevel += this.velocity * dt;
+    if (this.state === 'flagged') {
+      if (this.isFilling) {
+        const elapsed = now - this.fillStartTime;
+        const progress = Math.min(1, elapsed / FILL_DURATION_MS);
+        // Cosine ease-in-out curve: strictly no overshoot
+        const ease = (1 - Math.cos(progress * Math.PI)) / 2;
+        this.currentY = this.fillStartY + (PEACH_FULL_Y - this.fillStartY) * ease;
 
-    // Decay slosh amplitude
-    if (this.sloshing) {
-      this.sloshDecay -= dt;
-      if (this.sloshDecay <= 0) {
-        this.sloshing = false;
-        this.waveAmplitudeTarget = 6;
+        // Wave amplitude decays as fluid fills
+        this.waveAmplitude = Math.max(1.2, this.waveAmplitudeStart * (1 - 0.8 * ease));
+
+        // Gradient shifts toward reddish
+        // Top: --peach (#FF8A3D)
+        // Mid: shifts up to 60% --peach-hot
+        // Bot: --peach-hot (#FF4D1C)
+        const midBlend = 0.6 * ease;
+        this.setGradientStops('#FF8A3D', blendPeachHot(midBlend), '#FF4D1C');
+
+        if (progress >= 1) {
+          this.isFilling = false;
+          this.currentY = PEACH_FULL_Y;
+          this.waveAmplitude = 1.0;
+          this.startPulse(now);
+        }
+      } else if (this.isPulsing) {
+        // Continuous slow breathing loop (period 2.4s)
+        const pulseElapsed = now - this.pulseStartTime;
+        const phi = (2 * Math.PI * pulseElapsed) / PULSE_PERIOD_MS;
+        const s = (1 + Math.sin(phi)) / 2; // oscillates 0 -> 1 -> 0
+
+        // 1. Oscillate red blend between 50% and 85%
+        const midBlend = 0.5 + 0.35 * s;
+        this.setGradientStops('#FF8A3D', blendPeachHot(midBlend), '#FF4D1C');
+
+        // 2. Faint orange-red glow around outline (alpha 0.25 to 0.50)
+        const glowAlpha = 0.25 + 0.25 * s;
+        if (this.peachOutline) {
+          this.peachOutline.style.filter = `drop-shadow(0 0 6px rgba(255, 77, 28, ${glowAlpha.toFixed(2)}))`;
+        }
+
+        // 3. Subtle scale between 1.00 and 1.012
+        const scale = 1.0 + 0.012 * s;
+        if (this.svgEl) {
+          this.svgEl.style.transform = `scale(${scale.toFixed(4)})`;
+          this.svgEl.style.transformOrigin = '120px 140px';
+        }
+
+        this.currentY = PEACH_FULL_Y;
+        this.waveAmplitude = 1.0;
       }
-      // Lerp amplitude back
-      this.waveAmplitude += (this.waveAmplitudeTarget - this.waveAmplitude) * dt * 2;
+      return;
+    }
+
+    if (this.state === 'clean') {
+      if (this.isDraining) {
+        const elapsed = now - this.drainStartTime;
+        const progress = Math.min(1, elapsed / DRAIN_DURATION_MS);
+        // Ease-out drain
+        const ease = 1 - Math.pow(1 - progress, 2);
+        this.currentY = this.drainStartY + (PEACH_EMPTY_Y - this.drainStartY) * ease;
+        this.waveAmplitude = Math.max(1, 4 * (1 - ease));
+
+        if (progress >= 1) {
+          this.isDraining = false;
+          this.currentY = PEACH_EMPTY_Y;
+          this.waveAmplitude = 3;
+          this.showCleanTick();
+        }
+      } else {
+        this.currentY = PEACH_EMPTY_Y;
+        this.waveAmplitude = 3;
+      }
+      this.resetGradientToNormal();
+      return;
+    }
+
+    if (this.state === 'idle' || this.state === 'error') {
+      this.currentY = PEACH_EMPTY_Y;
+      this.waveAmplitude = 4;
+      this.resetGradientToNormal();
     }
   }
 
   // =====================================================================
-  // Wave Rendering — two sinusoidal paths
+  // Wave Rendering
   // =====================================================================
-  renderWaves(dt) {
-    const level = percentToY(Math.max(0, Math.min(100, this.currentLevel)));
+  renderWaves() {
+    let baseY = this.currentY;
 
-    // Add gentle bob in idle/clean states
-    let bob = 0;
-    if (this.state === 'idle' || this.state === 'clean' || this.state === 'error') {
-      bob = Math.sin(this.bobPhase * Math.PI / 2) * 3; // ~3px, ~4s period
+    // Gentle bob in idle or clean-drained states
+    if ((this.state === 'idle' || (this.state === 'clean' && !this.isDraining)) && !prefersReducedMotion()) {
+      baseY += Math.sin(this.bobPhase * (Math.PI / 2)) * 3; // ~3px, ~4s period
     }
 
-    const y = level + bob;
     const amp = this.waveAmplitude;
 
-    // Build wave path for the front wave
-    const frontPath = this.buildWavePath(y, amp, this.wavePhase, 0.04);
-    // Build wave path for the back wave (different phase, slightly larger amplitude)
-    const backPath = this.buildWavePath(y + 3, amp * 0.7, this.wavePhase + 2.0, 0.035);
+    // Front wave
+    const frontPath = this.buildWavePath(baseY, amp, this.wavePhase, 0.04);
+    // Back wave (different phase and slightly offset)
+    const backPath = this.buildWavePath(baseY + 2, amp * 0.7, this.wavePhase + 2.0, 0.035);
 
     if (this.waveFront) this.waveFront.setAttribute('d', frontPath);
     if (this.waveBack) this.waveBack.setAttribute('d', backPath);
 
-    // Render streaks inside fluid
-    this.renderStreaks(y);
-    // Render bubbles
-    this.renderBubblesDOM(y);
+    // Render decorative juice elements inside fluid
+    this.renderStreaks(baseY);
   }
 
   buildWavePath(baseY, amplitude, phase, frequency) {
@@ -261,23 +313,86 @@ export class MeterController {
     const segments = 24;
     const step = width / segments;
 
-    let d = `M 0 ${baseY}`;
+    let d = `M 0 ${baseY.toFixed(1)}`;
     for (let i = 0; i <= segments; i++) {
       const x = i * step;
       const waveY = baseY + amplitude * Math.sin(frequency * x * 10 + phase);
       d += ` L ${x.toFixed(1)} ${waveY.toFixed(1)}`;
     }
-    // Close at bottom
+    // Close below viewBox bottom
     d += ` L 240 280 L 0 280 Z`;
     return d;
   }
 
   // =====================================================================
-  // Juice Streaks — subtle vertical lines inside the fluid
+  // Reduced Motion Render
+  // =====================================================================
+  renderReducedMotion() {
+    if (this.state === 'flagged') {
+      this.currentY = PEACH_FULL_Y;
+      const frontPath = `M 0 ${PEACH_FULL_Y} L 240 ${PEACH_FULL_Y} L 240 280 L 0 280 Z`;
+      if (this.waveFront) this.waveFront.setAttribute('d', frontPath);
+      if (this.waveBack) this.waveBack.setAttribute('d', frontPath);
+      this.setGradientStops('#FF8A3D', blendPeachHot(0.6), '#FF4D1C');
+      if (this.peachOutline) {
+        this.peachOutline.style.filter = 'none';
+        this.peachOutline.setAttribute('stroke', '#FF8A3D');
+        this.peachOutline.removeAttribute('stroke-dasharray');
+      }
+      if (this.svgEl) this.svgEl.style.transform = 'scale(1)';
+    } else {
+      this.currentY = PEACH_EMPTY_Y;
+      const emptyPath = `M 0 280 L 240 280 L 240 280 L 0 280 Z`;
+      if (this.waveFront) this.waveFront.setAttribute('d', emptyPath);
+      if (this.waveBack) this.waveBack.setAttribute('d', emptyPath);
+      this.resetGradientToNormal();
+      if (this.svgEl) this.svgEl.style.transform = 'scale(1)';
+      if (this.peachOutline) this.peachOutline.style.filter = 'none';
+    }
+  }
+
+  // =====================================================================
+  // Gradient Helpers
+  // =====================================================================
+  setGradientStops(stop0, stop1, stop2) {
+    if (!this.gradientStops || this.gradientStops.length < 3) return;
+    this.gradientStops[0].setAttribute('stop-color', stop0);
+    this.gradientStops[1].setAttribute('stop-color', stop1);
+    this.gradientStops[2].setAttribute('stop-color', stop2);
+  }
+
+  resetGradientToNormal() {
+    this.setGradientStops('#FFB784', '#FF8A3D', '#FF4D1C');
+    if (this.waveBack) {
+      this.waveBack.setAttribute('fill', '#FF8A3D');
+      this.waveBack.setAttribute('opacity', '0.5');
+    }
+  }
+
+  // =====================================================================
+  // Pulse Loop Control
+  // =====================================================================
+  startPulse(startTime) {
+    this.isPulsing = true;
+    this.pulseStartTime = startTime || performance.now();
+  }
+
+  stopPulse() {
+    this.isPulsing = false;
+    this.isFilling = false;
+    if (this.peachOutline) {
+      this.peachOutline.style.filter = 'none';
+    }
+    if (this.svgEl) {
+      this.svgEl.style.transform = 'scale(1)';
+    }
+  }
+
+  // =====================================================================
+  // Juice Streaks & Bubbles
   // =====================================================================
   initStreaks() {
     this.streaks = [];
-    // Create streak elements in the SVG fluid group
     if (!this.fluidGroup) return;
     for (let i = 0; i < 5; i++) {
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -298,7 +413,7 @@ export class MeterController {
     const bottom = 270;
     for (const streak of this.streaks) {
       const height = (bottom - fluidTop) * streak.lengthFactor;
-      if (height < 5 || fluidTop > 260) {
+      if (height < 5 || fluidTop > 250) {
         streak.el.setAttribute('opacity', '0');
         continue;
       }
@@ -310,9 +425,6 @@ export class MeterController {
     }
   }
 
-  // =====================================================================
-  // Bubbles — small circles that rise and pop inside the fluid
-  // =====================================================================
   initBubbles() {
     this.bubbles = [];
     if (!this.fluidGroup) return;
@@ -334,16 +446,15 @@ export class MeterController {
   }
 
   updateBubbles(dt) {
-    const fluidTop = percentToY(Math.max(0, Math.min(100, this.currentLevel)));
-    const hasFluid = this.currentLevel > 2;
+    const fluidTop = this.currentY;
+    const hasFluid = fluidTop < 245;
 
     for (const b of this.bubbles) {
       if (!b.alive) {
-        // Spawn with low probability when there's fluid
         if (hasFluid && Math.random() < dt * 0.8) {
           b.alive = true;
           b.x = 40 + Math.random() * 160;
-          b.y = PEACH_BOTTOM - 10;
+          b.y = 245;
           b.r = 1.5 + Math.random() * 2;
           b.speed = 20 + Math.random() * 25;
           b.life = 0;
@@ -353,10 +464,9 @@ export class MeterController {
       }
 
       b.y -= b.speed * dt;
-      b.x += Math.sin(b.life * 4) * 8 * dt; // gentle sideways drift
+      b.x += Math.sin(b.life * 4) * 8 * dt;
       b.life += dt;
 
-      // Pop when reaching near the surface or too old
       if (b.y < fluidTop + 5 || b.life > 4) {
         b.alive = false;
         b.el.setAttribute('opacity', '0');
@@ -365,257 +475,232 @@ export class MeterController {
 
       b.el.setAttribute('cx', b.x.toFixed(1));
       b.el.setAttribute('cy', b.y.toFixed(1));
-      // Fade as approaching surface
       const distToSurface = b.y - fluidTop;
       const alpha = Math.min(0.3, distToSurface / 60);
       b.el.setAttribute('opacity', alpha.toFixed(2));
     }
   }
 
-  renderBubblesDOM(fluidTop) {
-    // Already updated in updateBubbles, this is a no-op placeholder
-  }
-
-  // =====================================================================
-  // Count-Up Animation
-  // =====================================================================
-  startCountUp(from, to) {
-    this.countFrom = typeof from === 'number' && !isNaN(from) ? Math.max(0, from) : 0;
-    this.countTo = typeof to === 'number' && !isNaN(to) ? Math.max(0, to) : 0;
-    this.countStartTime = performance.now();
-    this.isCounting = true;
-  }
-
-  updateCountUp() {
-    if (!this.isCounting) return;
-
-    const currentTime = performance.now();
-    const elapsed = Math.max(0, currentTime - this.countStartTime);
-    const progress = Math.min(Math.max(0, elapsed / this.countDuration), 1);
-    const eased = easeOutCubic(progress);
-
-    this.displayNumber = Math.round(this.countFrom + (this.countTo - this.countFrom) * eased);
-
-    if (progress >= 1) {
-      this.displayNumber = this.countTo;
-      this.isCounting = false;
-    }
-  }
-
-  renderNumber() {
-    if (!this.numberEl) return;
-
-    if (this.state === 'analyzing') {
-      // Already set via loading message timer
-      return;
-    }
-
-    if (this.state === 'idle' || this.state === 'error') {
-      // en dash already set in setState
-      return;
-    }
-
-    if (this.state === 'clean') {
-      this.numberEl.textContent = '0';
-      return;
-    }
-
-    // Result or clean: show the number
-    this.numberEl.textContent = String(this.displayNumber);
-  }
-
   // =====================================================================
   // State Transitions
   // =====================================================================
   setIdle() {
-    this.state = 'idle';
-    this.targetPercent = 0;
-    this.targetNumber = 0;
-    this.displayNumber = 0;
-    this.countFrom = 0;
-    this.countTo = 0;
-    this.isCounting = false;
-    this.velocity = 0;
-    this.waveAmplitude = 6;
-    this.waveAmplitudeTarget = 6;
+    this.stopPulse();
     this.stopLoadingMessages();
+    this.state = 'idle';
+    this.currentY = PEACH_EMPTY_Y;
+    this.targetY = PEACH_EMPTY_Y;
+    this.waveAmplitude = 4;
 
-    // Visuals
     this.setOutlineDashed(true);
     this.hideCleanTick();
-    if (this.numberEl) this.numberEl.textContent = '\u2013'; // en dash
-    if (this.percentSign) this.percentSign.hidden = true;
-    if (this.bandEl) this.bandEl.textContent = 'Idle';
-    if (this.explainerEl) this.explainerEl.textContent = 'Paste text, HTML, or an image to measure manipulative pressure.';
 
-    // ARIA
-    this.updateAria(0, 'Idle');
+    if (this.bandEl) {
+      this.bandEl.textContent = 'Idle';
+      this.bandEl.className = 'meter-band';
+      this.bandEl.style.opacity = '1';
+    }
+    if (this.explainerEl) {
+      this.explainerEl.textContent = 'Paste text, HTML, or an image to measure manipulative pressure.';
+    }
+
+    if (this.svgBox) {
+      this.svgBox.setAttribute('role', 'img');
+      this.svgBox.setAttribute('aria-label', 'Peach empty, nothing detected');
+      this.svgBox.removeAttribute('aria-valuenow');
+      this.svgBox.removeAttribute('aria-valuemin');
+      this.svgBox.removeAttribute('aria-valuemax');
+    }
   }
 
   setAnalyzing() {
+    this.stopPulse();
     this.state = 'analyzing';
     this.analyzePhase = 0;
-    this.velocity = 0;
-    this.waveAmplitude = 10;
-    this.waveAmplitudeTarget = 10;
+    this.waveAmplitude = 9;
 
-    // Visuals
     this.setOutlineDashed(true);
     this.hideCleanTick();
-    if (this.percentSign) this.percentSign.hidden = true;
-    if (this.bandEl) this.bandEl.textContent = '';
 
-    // Start loading message rotation
     this.startLoadingMessages();
 
-    // ARIA
-    if (this.a11yStatus) this.a11yStatus.textContent = 'Analyzing input...';
+    if (this.a11yStatus) {
+      this.a11yStatus.textContent = 'Analyzing input...';
+    }
     if (this.svgBox) {
-      this.svgBox.setAttribute('aria-label', 'Cheekometer: Analyzing');
+      this.svgBox.setAttribute('role', 'img');
+      this.svgBox.setAttribute('aria-label', 'Peach meter: Analyzing');
     }
   }
 
   setResult(apiResult) {
     this.stopLoadingMessages();
     const summary = apiResult?.summary || {};
+
     if (summary.status === 'no_content') {
       this.setNoContent();
       return;
     }
 
-    const exposure = apiResult?.exposure || apiResult?.summary?.exposure || {};
-    const percent = exposure.percent ?? 0;
-    const band = exposure.label || 'Fresh';
+    // Single rule for outcome: response.summary.flagged_items > 0
+    const flagged = isFlagged(apiResult);
     const findings = apiResult?.findings || [];
-    const flaggedCount = findings.filter(f => f.kind === 'flag').length;
+    const flaggedCount = summary.flagged_items ?? findings.filter((f) => f.kind === 'flag').length;
 
-    if (percent === 0 || summary.status === 'clean') {
-      // Clean result
+    if (flagged) {
+      this.setFlagged(flaggedCount);
+    } else {
       this.setClean(apiResult);
-      return;
     }
+  }
 
-    this.state = 'result';
-    this.targetPercent = percent;
-    this.targetNumber = percent;
-
-    // Trigger slosh (wave amplitude spike)
-    this.sloshing = true;
-    this.sloshDecay = 2.0;
-    this.waveAmplitude = 14 + Math.min(percent / 5, 10); // bigger slosh for higher result
-    this.waveAmplitudeTarget = 6;
-
-    // Count-up from current display
-    this.startCountUp(this.displayNumber, percent);
-
-    // Visuals
-    this.setOutlineSolid();
+  setFlagged(flaggedCount) {
+    this.stopPulse();
+    this.state = 'flagged';
     this.hideCleanTick();
-    if (this.percentSign) this.percentSign.hidden = false;
+    this.setOutlineSolid();
+
+    // Side text fades in over ~300ms
     if (this.bandEl) {
-      this.bandEl.textContent = band;
+      this.bandEl.textContent = 'Soft spots detected';
+      this.bandEl.className = 'meter-band';
       this.bandEl.style.opacity = '0';
-      // Fade in band label
       requestAnimationFrame(() => {
-        this.bandEl.style.transition = 'opacity 0.5s ease';
+        this.bandEl.style.transition = 'opacity 300ms ease';
         this.bandEl.style.opacity = '1';
       });
     }
     if (this.explainerEl) {
-      this.explainerEl.textContent = this.getExplainerText(percent, band);
+      this.explainerEl.textContent = 'Review each finding below.';
     }
 
-    // ARIA
-    this.updateAria(percent, band);
-    if (this.a11yStatus) {
-      this.a11yStatus.textContent = `Audit complete. ${percent} percent exposure. ${flaggedCount} ${flaggedCount === 1 ? 'item' : 'items'} flagged.`;
+    // Accessibility updates immediately
+    if (this.svgBox) {
+      this.svgBox.setAttribute('role', 'img');
+      this.svgBox.setAttribute('aria-label', 'Peach full, soft spots detected');
+      this.svgBox.removeAttribute('aria-valuenow');
+      this.svgBox.removeAttribute('aria-valuemin');
+      this.svgBox.removeAttribute('aria-valuemax');
     }
+    if (this.a11yStatus) {
+      const itemsWord = flaggedCount === 1 ? 'item' : 'items';
+      this.a11yStatus.textContent = `Audit complete. Soft spots detected. ${flaggedCount} ${itemsWord} flagged.`;
+    }
+
+    if (prefersReducedMotion()) {
+      this.renderReducedMotion();
+      return;
+    }
+
+    // Start fill animation from current level to full over 3.2s
+    this.fillStartTime = performance.now();
+    this.fillStartY = this.currentY;
+    this.waveAmplitudeStart = Math.max(6, this.waveAmplitude);
+    this.isFilling = true;
   }
 
   setClean(apiResult) {
+    this.stopPulse();
     this.state = 'clean';
-    this.targetPercent = 0;
-    this.targetNumber = 0;
-    this.displayNumber = 0;
-    this.countFrom = 0;
-    this.countTo = 0;
-    this.isCounting = false;
-    this.velocity = 0;
-    this.waveAmplitude = 4;
-    this.waveAmplitudeTarget = 4;
-    this.stopLoadingMessages();
-
-    // Visuals
     this.setOutlineSolid();
-    this.showCleanTick();
-    if (this.numberEl) this.numberEl.textContent = '0';
-    if (this.percentSign) this.percentSign.hidden = false;
-    if (this.bandEl) this.bandEl.textContent = 'Fresh';
-    if (this.explainerEl) this.explainerEl.textContent = 'No manipulative patterns detected. This does not guarantee a fair checkout.';
 
-    // ARIA
-    this.updateAria(0, 'Fresh');
+    if (this.bandEl) {
+      this.bandEl.textContent = 'Fresh';
+      this.bandEl.className = 'meter-band';
+      this.bandEl.style.opacity = '0';
+      requestAnimationFrame(() => {
+        this.bandEl.style.transition = 'opacity 300ms ease';
+        this.bandEl.style.opacity = '1';
+      });
+    }
+    if (this.explainerEl) {
+      this.explainerEl.textContent = 'No manipulative patterns detected. This does not guarantee a fair checkout.';
+    }
+
+    // Accessibility
+    if (this.svgBox) {
+      this.svgBox.setAttribute('role', 'img');
+      this.svgBox.setAttribute('aria-label', 'Peach empty, nothing detected');
+      this.svgBox.removeAttribute('aria-valuenow');
+      this.svgBox.removeAttribute('aria-valuemin');
+      this.svgBox.removeAttribute('aria-valuemax');
+    }
     if (this.a11yStatus) {
-      this.a11yStatus.textContent = 'Audit complete. 0 percent exposure. No dark patterns found. Fresh.';
+      this.a11yStatus.textContent = 'Audit complete. Fresh. No items flagged.';
+    }
+
+    if (prefersReducedMotion()) {
+      this.currentY = PEACH_EMPTY_Y;
+      this.showCleanTick();
+      this.renderReducedMotion();
+      return;
+    }
+
+    // Drain fluid to empty over ~0.8s if not already empty
+    if (this.currentY < PEACH_EMPTY_Y - 5) {
+      this.drainStartTime = performance.now();
+      this.drainStartY = this.currentY;
+      this.isDraining = true;
+      this.hideCleanTick();
+    } else {
+      this.currentY = PEACH_EMPTY_Y;
+      this.isDraining = false;
+      this.showCleanTick();
     }
   }
 
   setNoContent() {
-    this.state = 'idle';
-    this.targetPercent = 0;
-    this.targetNumber = 0;
-    this.displayNumber = 0;
-    this.countFrom = 0;
-    this.countTo = 0;
-    this.isCounting = false;
-    this.velocity = 0;
+    this.stopPulse();
     this.stopLoadingMessages();
+    this.state = 'idle';
+    this.currentY = PEACH_EMPTY_Y;
+    this.waveAmplitude = 4;
 
-    // Visuals: Idle look plus "Nothing to read yet" (Section 7 Phase 3, Section 10)
     this.setOutlineDashed(true);
     this.hideCleanTick();
-    if (this.numberEl) this.numberEl.textContent = '\u2013'; // en dash
-    if (this.percentSign) this.percentSign.hidden = true;
-    if (this.bandEl) this.bandEl.textContent = 'Idle';
+
+    if (this.bandEl) {
+      this.bandEl.textContent = 'Idle';
+      this.bandEl.className = 'meter-band';
+      this.bandEl.style.opacity = '1';
+    }
     if (this.explainerEl) {
       this.explainerEl.textContent = 'Nothing to read yet';
     }
 
-    // ARIA
-    this.updateAria(0, 'Nothing to read yet');
+    if (this.svgBox) {
+      this.svgBox.setAttribute('role', 'img');
+      this.svgBox.setAttribute('aria-label', 'Peach empty, nothing detected');
+    }
     if (this.a11yStatus) {
       this.a11yStatus.textContent = 'Audit complete. Nothing to read yet.';
     }
   }
 
   setError(err) {
-    this.state = 'error';
-    this.targetPercent = 0;
-    this.targetNumber = 0;
-    this.displayNumber = 0;
-    this.countFrom = 0;
-    this.countTo = 0;
-    this.isCounting = false;
-    this.velocity = 0;
+    this.stopPulse();
     this.stopLoadingMessages();
+    this.state = 'error';
+    this.currentY = PEACH_EMPTY_Y;
+    this.waveAmplitude = 4;
 
-    // Visuals
     this.setOutlineDashed(true);
     this.hideCleanTick();
-    if (this.numberEl) this.numberEl.textContent = '\u2013'; // en dash
-    if (this.percentSign) this.percentSign.hidden = true;
-    if (this.bandEl) this.bandEl.textContent = 'Error';
+
+    if (this.bandEl) {
+      this.bandEl.textContent = 'Error';
+      this.bandEl.className = 'meter-band error-band';
+      this.bandEl.style.opacity = '1';
+    }
     if (this.explainerEl) {
-      const msg = err?.message || 'Something went wrong. Check the server connection.';
-      this.explainerEl.textContent = msg;
+      this.explainerEl.textContent = err?.message || 'Something went wrong. Check the server connection.';
     }
 
-    // Pulse outline red briefly
     this.pulseOutlineError();
 
-    // ARIA
     if (this.svgBox) {
-      this.svgBox.setAttribute('aria-label', 'Cheekometer: Error');
+      this.svgBox.setAttribute('role', 'img');
+      this.svgBox.setAttribute('aria-label', 'Peach meter: Error');
     }
   }
 
@@ -639,7 +724,6 @@ export class MeterController {
   pulseOutlineError() {
     if (!this.peachOutline) return;
     this.peachOutline.setAttribute('stroke', '#FF4D1C');
-    // Three pulses via opacity
     let pulses = 0;
     const interval = setInterval(() => {
       pulses++;
@@ -658,10 +742,9 @@ export class MeterController {
       this.cleanTick.setAttribute('opacity', '1');
       return;
     }
-    // Fade in
     let op = 0;
     const fade = () => {
-      op += 0.04;
+      op += 0.05;
       if (op >= 1) {
         this.cleanTick.setAttribute('opacity', '1');
         return;
@@ -681,7 +764,6 @@ export class MeterController {
   wobble() {
     if (!this.svgBox) return;
     this.svgBox.classList.remove('wobble');
-    // Force reflow
     void this.svgBox.offsetWidth;
     this.svgBox.classList.add('wobble');
     this.svgBox.addEventListener('animationend', () => {
@@ -690,7 +772,7 @@ export class MeterController {
   }
 
   // =====================================================================
-  // Loading Messages (rotate max 4, cycle)
+  // Loading Messages Rotation
   // =====================================================================
   startLoadingMessages() {
     this.loadingMsgIndex = 0;
@@ -702,12 +784,10 @@ export class MeterController {
   }
 
   showLoadingMessage() {
-    if (this.numberEl) {
-      // Show ellipsis animation text
-      this.numberEl.textContent = '';
-    }
     if (this.bandEl) {
+      this.bandEl.className = 'meter-band loading-msg';
       this.bandEl.textContent = LOADING_MESSAGES[this.loadingMsgIndex];
+      this.bandEl.style.opacity = '1';
     }
     if (this.explainerEl) {
       this.explainerEl.textContent = '';
@@ -722,30 +802,11 @@ export class MeterController {
   }
 
   // =====================================================================
-  // ARIA Updates
-  // =====================================================================
-  updateAria(percent, bandLabel) {
-    if (!this.svgBox) return;
-    this.svgBox.setAttribute('aria-valuenow', String(percent));
-    this.svgBox.setAttribute('aria-label', `Cheekometer Exposure Level: ${percent} percent (${bandLabel})`);
-  }
-
-  // =====================================================================
-  // Explainer Text
-  // =====================================================================
-  getExplainerText(percent, band) {
-    if (percent === 0) return 'No manipulative patterns detected. This does not guarantee a fair checkout.';
-    if (percent < 25) return 'A few minor pressure signals. Likely routine but worth reviewing.';
-    if (percent < 50) return 'Several influence tactics detected. Review each finding.';
-    if (percent < 75) return 'Significant manipulative pressure. Users may be misled.';
-    return 'High dark-pattern density. This interface appears heavily manipulative.';
-  }
-
-  // =====================================================================
   // Cleanup
   // =====================================================================
   destroy() {
     this.stop();
+    this.stopPulse();
     this.stopLoadingMessages();
   }
 }

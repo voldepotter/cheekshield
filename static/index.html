@@ -203,11 +203,11 @@
             </div>
           </div>
 
-          <!-- Cheekometer Column (~42%) -->
+          <!-- Peach Outcome Column (~42%) -->
           <div class="hero-meter-col">
             <div class="meter-wrapper" id="meter-card">
               <!-- Peach SVG Container (Clickable Easter egg) -->
-              <div class="meter-svg-container" id="meter-svg-box" role="meter" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Cheekometer Exposure Level: 0 percent (Fresh)">
+              <div class="meter-svg-container" id="meter-svg-box" role="img" aria-label="Peach empty, nothing detected">
                 <svg id="meter-svg" class="meter-svg" viewBox="0 0 240 280">
                   <defs>
                     <!-- Clip path for fluid -->
@@ -243,15 +243,6 @@
                     stroke-dasharray="6 5"
                   />
 
-                  <!-- Measuring glass scale ticks on right edge -->
-                  <g id="meter-scale-ticks" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" font-family="system-ui, sans-serif" font-size="8" fill="rgba(255,255,255,0.5)">
-                    <line x1="216" y1="230" x2="226" y2="230" /><text x="228" y="233">0</text>
-                    <line x1="220" y1="185" x2="228" y2="185" /><text x="230" y="188">25</text>
-                    <line x1="220" y1="140" x2="228" y2="140" /><text x="230" y="143">50</text>
-                    <line x1="216" y1="95" x2="226" y2="95" /><text x="228" y="98">75</text>
-                    <line x1="200" y1="55" x2="210" y2="55" /><text x="212" y="58">100</text>
-                  </g>
-
                   <!-- Cleft Line (above fluid, 45% white) -->
                   <path
                     id="meter-cleft"
@@ -278,24 +269,13 @@
                 </svg>
               </div>
 
-              <!-- Meter Data Side (Number, Band, Explainer) -->
+              <!-- Meter Data Side (Outcome & Explainer) -->
               <div class="meter-data">
-                <div class="meter-number-row">
-                  <span id="meter-number" class="meter-number">&ndash;</span>
-                  <span id="meter-percent-sign" class="meter-percent-sign" hidden>%</span>
-                </div>
                 <div id="meter-band" class="meter-band">Idle</div>
                 <p id="meter-explainer" class="meter-explainer">Paste text, HTML, or an image to measure manipulative pressure.</p>
-                <button type="button" id="meter-calc-toggle" class="meter-calc-link" aria-expanded="false" aria-controls="calc-popover">
-                  How is this calculated?
-                </button>
               </div>
-
-              <!-- Calculation Popover (Section 7 Phase 3) -->
-              <div id="calc-popover" class="calc-popover" hidden>
-                <p>The Cheekometer adds up how much pressure the page puts on a shopper. Every flagged item counts by its risk and by how sure the check is. It rises quickly with the first few findings, then levels off.</p>
-                <p style="margin-top: 6px;">Both DistilBERT model predictions and rule-based checks contribute. It is an index for comparing pages, not the probability that anything is illegal.</p>
-              </div>
+            </div>
+          </div>
             </div>
           </div>
         </div>
@@ -358,18 +338,7 @@
                   <span class="leader" aria-hidden="true"></span>
                   <span id="receipt-elapsed-time" class="receipt-num">—</span>
                 </div>
-
-                <!-- Cheekometer Total Block -->
-                <div class="receipt-total-block">
-                  <div class="receipt-total-header">
-                    <span class="receipt-total-label">Cheekometer</span>
-                    <span id="receipt-exposure-val" class="receipt-total-number">0%</span>
-                  </div>
-                  <div id="receipt-exposure-band" class="receipt-total-band">Fresh</div>
-                  <div class="receipt-gauge-track" aria-hidden="true">
-                    <div id="receipt-gauge-fill" class="receipt-gauge-fill" style="width: 0%;"></div>
-                  </div>
-                </div>
+                <hr class="receipt-divider">
 
                 <!-- Disclaimer Stamp -->
                 <div class="receipt-stamp-container">

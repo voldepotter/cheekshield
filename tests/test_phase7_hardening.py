@@ -48,13 +48,13 @@ class TestInputSizeLimits:
         assert "20,000" in data["error"]["message"]
 
     def test_html_over_400kb_rejected(self, client):
-        huge_html = "<div>" + ("hello world " * 40_000) + "</div>"
+        huge_html = "<div>" + ("hello world " * 400_000) + "</div>"
         assert len(huge_html.encode("utf-8")) > config.MAX_HTML_BYTES
         res = client.post("/api/analyze", json={"mode": "html", "content": huge_html})
         assert res.status_code == 400
         data = res.get_json()
         assert data["error"]["code"] == "too_large"
-        assert "400 KB" in data["error"]["message"]
+        assert f"{config.MAX_HTML_BYTES // 1024} KB" in data["error"]["message"]
 
     def test_image_over_8mb_rejected(self, client):
         fake_huge_bytes = b"\x89PNG\r\n\x1a\n" + (b"\x00" * (config.MAX_IMAGE_BYTES + 100))

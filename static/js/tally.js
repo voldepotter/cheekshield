@@ -20,9 +20,6 @@ export class TallyController {
     this.highestRiskEl = document.getElementById('receipt-highest-risk');
     this.inputModeEl = document.getElementById('receipt-input-mode');
     this.elapsedTimeEl = document.getElementById('receipt-elapsed-time');
-    this.exposureValEl = document.getElementById('receipt-exposure-val');
-    this.exposureBandEl = document.getElementById('receipt-exposure-band');
-    this.gaugeFillEl = document.getElementById('receipt-gauge-fill');
   }
 
   /**
@@ -34,7 +31,6 @@ export class TallyController {
 
     const findings = result.findings || [];
     const summary = result.summary || {};
-    const exposure = result.exposure || {};
 
     // 1. Collect unique categories from flagged findings (excluding benign 'Not Dark Pattern')
     const findingCategories = findings
@@ -142,13 +138,6 @@ export class TallyController {
     const elapsedMs = result.elapsed_ms != null ? result.elapsed_ms : 0;
     const elapsedSec = (elapsedMs / 1000).toFixed(1);
     if (this.elapsedTimeEl) this.elapsedTimeEl.textContent = `${elapsedSec} s`;
-
-    // Cheekometer exposure (single source of truth matching meter)
-    const percent = exposure.percent != null ? exposure.percent : 0;
-    const bandLabel = exposure.label || 'Fresh';
-    if (this.exposureValEl) this.exposureValEl.textContent = `${percent}%`;
-    if (this.exposureBandEl) this.exposureBandEl.textContent = bandLabel;
-    if (this.gaugeFillEl) this.gaugeFillEl.style.width = `${percent}%`;
 
     // 5. Saved result notice (Section 7 Phase 7 point 6)
     const existingNotice = this.stripEl.querySelector('.saved-result-tag');

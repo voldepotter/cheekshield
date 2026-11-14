@@ -25,10 +25,14 @@
   .receipt-export-options,
   .slab-footer,
   .btn-clear,
-  .meter-calc-link,
-  .calc-popover,
   .screenshot-viewer-container {
     display: none !important;
+  }
+
+  #meter-svg-box,
+  #meter-svg {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .app-shell {

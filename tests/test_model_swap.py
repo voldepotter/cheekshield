@@ -32,6 +32,11 @@ def test_model_swap_drill():
     os.makedirs(model_dir, exist_ok=True)
     meta_path = os.path.join(model_dir, "meta.json")
 
+    original_meta_content = None
+    if os.path.exists(meta_path):
+        with open(meta_path, "r", encoding="utf-8") as f:
+            original_meta_content = f.read()
+
     # Create modified meta with new class and higher macro-f1
     swapped_classes = list(baseline_info["classes"]) + ["Confirm Shaming"]
     n_classes = len(swapped_classes)
@@ -75,7 +80,10 @@ def test_model_swap_drill():
 
     finally:
         # 4. Cleanup and revert
-        if os.path.exists(meta_path):
+        if original_meta_content is not None:
+            with open(meta_path, "w", encoding="utf-8") as f:
+                f.write(original_meta_content)
+        elif os.path.exists(meta_path):
             os.remove(meta_path)
 
         # Force re-warmup to baseline

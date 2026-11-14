@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 2. Initialize Input Controller (Phase 2)
   inputController = new InputController();
 
-  // 3. Initialize Cheekometer Controller (Phase 3)
+  // 3. Initialize Peach Meter Controller (Phase 3)
   meterController = new MeterController();
 
   // 4. Initialize Results Controllers (Phase 4)
@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderResult(result) {
     if (!result) return;
 
-    // Single source of truth: response.exposure drives meter, tally, findings, and viewer
+    // Render results into meter, tally, findings, and viewer
     meterController?.setResult(result);
     tallyController?.render(result);
     findingsController?.render(result);
@@ -198,7 +198,7 @@ function toggleDemoToolbar(forceOpen = null) {
       <button type="button" class="demo-step-btn" data-step="1" title="1. Deceptive sample audit">1. Deceptive</button>
       <button type="button" class="demo-step-btn" data-step="2" title="2. Inspect findings & ethical fix">2. Fix</button>
       <button type="button" class="demo-step-btn" data-step="3" title="3. Screenshot viewer">3. Screen</button>
-      <button type="button" class="demo-step-btn" data-step="4" title="4. Clean sample (0% Fresh)">4. Clean</button>
+      <button type="button" class="demo-step-btn" data-step="4" title="4. Clean sample (Fresh)">4. Clean</button>
       <button type="button" class="demo-step-btn" data-step="5" title="5. Inspect model evaluation panel">5. Model</button>
       <button type="button" class="demo-step-btn" data-step="6" title="6. Save PDF export">6. Export</button>
     `;
@@ -253,7 +253,7 @@ function runDemoStep(step) {
       }, 150);
       break;
 
-    case 4: // Clean sample & 0% fresh state
+    case 4: // Clean sample & Fresh state
       document.getElementById('tab-text')?.click();
       setTimeout(() => {
         document.getElementById('sample-clean-btn')?.click();
