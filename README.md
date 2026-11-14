@@ -22,6 +22,12 @@ Paste text, drop HTML, or upload a screenshot, and get back _evidence_, not just
 
 ---
 
+### DEMO YOUTUBE VIDEO WITH TESTING ON HARD SETS:
+
+LINK: https://youtu.be/3SgeDiKBG8Q
+
+---
+
 ## 🍑 What is CheekShield?
 
 Ever seen **"Hurry! Only 2 left!"**, a countdown that resets when you refresh, a pre-ticked _"Add order protection"_ box, or a decline button that says **"No thanks, I don't like saving money"**? Those are **dark patterns**: interface tricks that steer people into spending more, subscribing, or sharing data they didn't mean to.
