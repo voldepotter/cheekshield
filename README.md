@@ -1,230 +1,213 @@
-# CheekShield AI — Dark Pattern & Deceptive UI Auditor
+# CheekShield AI: Dark Pattern and Deceptive UI Auditor
 
-**Project for TECHNOVUS &bull; AAYAM XI &bull; National Institute of Technology, Agartala**
+TECHNOVUS, AAYAM XI, NIT Agartala. AI & ML track.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-orange.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests: 83 Passing, 1 Skipped](https://img.shields.io/badge/tests-83%20passing%2C%201%20skipped-brightgreen.svg)]()
-[![Offline Zero-CDN](https://img.shields.io/badge/offline-100%25%20zero--CDN-blue.svg)]()
 
-> **"Paste a page. Cheeko checks its cheek."**  
-> CheekShield AI is a single-page audit tool that scrutinizes e-commerce checkouts, subscription modals, and product listings for deceptive user interface patterns (dark patterns). It combines a fine-tuned DistilBERT transformer with DOM rule heuristics to deliver explainable, calibrated, evidence-backed audits with zero frontend bloat and zero user data retention.
+> **Cheeko checks the softspots.**
+> Paste checkout text, paste page HTML, or upload a screenshot. CheekShield finds manipulative design and shows the evidence for every finding: the category, the original text or screenshot region, a confidence or rule score, a risk level, the words that triggered it, and an ethical fix.
+
+Outputs are assistive indications of potentially deceptive design, not legal findings.
 
 ---
 
-## Architecture Overview
+## What it does
+
+| Input       | What happens                                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Pasted text | Split into lines, each line classified by the model                                                                        |
+| HTML / DOM  | Visible text classified by the model, plus rule checks on the markup                                                       |
+| Screenshot  | EasyOCR reads the text, the model classifies it, and OpenCV rules check buttons and boxes. Findings are drawn on the image |
+
+The result is shown as a peach. If nothing is flagged, the peach stays empty and says **Fresh**. If anything is flagged, the peach fills and pulses, says **Soft spots detected**, and the evidence list below explains each finding. Every finding carries a badge showing whether it came from the **Model** or from a **Rule**, and rule scores are never shown as probabilities.
+
+### Categories
+
+| Category           | Detected by                                                                                                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Urgency            | DistilBERT, plus a countdown-timer rule                                                                                                                           |
+| Scarcity           | DistilBERT                                                                                                                                                        |
+| Social proof       | DistilBERT                                                                                                                                                        |
+| Misdirection       | DistilBERT (confirmshaming wording), plus an OpenCV button size and colour check on screenshots                                                                   |
+| Preselected choice | HTML `checked` attribute, or an OpenCV checkbox check on screenshots. Paid-looking labels are high risk; routine ones such as "Remember me" are shown as low risk |
+| Disguised ad       | Rule check                                                                                                                                                        |
+| Other dark pattern | DistilBERT (sneaking, obstruction, forced action)                                                                                                                 |
+
+## Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Browser ["Frontend (Vanilla JS / CSS / SVG)"]
-        UI["Input Panel<br/>(Text / HTML / Screenshot)"]
-        Cheeko["The Cheekometer<br/>(SVG Fluid Spring Meter)"]
-        Receipt["Tally Strip<br/>(White Paper Dot-Leader)"]
-        Findings["Evidence List<br/>(Attributions, Rules, Ethical Fix)"]
-        Viewer["Screenshot Viewer<br/>(Pan / Zoom / Box Sync)"]
-        ModelPanel["Evaluation Panel<br/>(Macro F1, Confusion Matrix)"]
-    end
+flowchart LR
+    A[Text / HTML / Screenshot] --> B[Flask API]
+    B --> C[Engine adapter]
+    C --> D[Text extraction<br/>HTML parser / EasyOCR]
+    D --> E[DistilBERT classifier<br/>calibrated confidence + word evidence]
+    D --> F[Rule checks<br/>pre-ticked boxes, hidden fees,<br/>timers, button size and colour]
+    E --> G[Findings]
+    F --> G
+    G --> H[Web UI<br/>peach, receipt, evidence list]
+```
 
-    subgraph Server ["Backend (Python Flask)"]
-        App["app.py<br/>(CORS, Validation, Limits)"]
-        Adapter["adapter/engine_adapter.py<br/>(Contract & Hot-Reload)"]
-        Exposure["adapter/exposure.py<br/>(Non-linear Saturation Formula)"]
-        Norm["adapter/normalize.py<br/>(Schema v1 Sanitizer)"]
-    end
+- The **engine** (`engine/darkpattern_engine.py`) holds the model code and the rule checks. The **adapter** (`adapter/`) is the only code that talks to it and converts its output into one stable JSON format, so the web UI never depends on engine internals.
+- To upgrade the model, replace the files in `outputs/model/`. The adapter reloads them without any change to the UI or the API.
 
-    subgraph ML ["Inference Engine (Read-Only)"]
-        BERT["DistilBERT Model<br/>(Sequence Classifier + XAI)"]
-        DOM["DOM Heuristics<br/>(Timer, Contrast, Pre-selection)"]
-        OCR["EasyOCR Pipeline<br/>(Text Extraction + Bounding Boxes)"]
-    end
+### Project layout
 
-    UI -->|POST /api/analyze| App
-    App --> Adapter
-    Adapter --> ML
-    ML --> Adapter
-    Adapter --> Norm
-    Norm --> Exposure
-    Exposure --> App
-    App -->|JSON Schema v1| UI
-    UI --> Cheeko
-    UI --> Receipt
-    UI --> Findings
-    UI --> Viewer
-    App -->|GET /api/model| ModelPanel
+```
+app.py            Flask server and /api routes
+adapter/          Engine adapter, output normalisation
+engine/           Model and rule-check code (do not edit)
+outputs/model/    Trained model files (weights are downloaded, see below)
+static/           Frontend: plain HTML, CSS and JavaScript, no frameworks, no CDN
+samples/          Deceptive and clean sample inputs
+scripts/          Preflight check
+tests/            Automated tests
 ```
 
 ---
 
-## Disclosed Dependencies
+## Model and data
 
-CheekShield AI discloses all runtime and training dependencies as required:
+- **Model:** `distilbert-base-uncased` fine-tuned as a six-class classifier (Urgency, Scarcity, Social Proof, Misdirection, Other Dark Pattern, Not Dark Pattern). Confidence is temperature-scaled, and each flagged text gets leave-one-out word evidence.
+- **Training data:** the [E-Commerce Dark Patterns text dataset](https://github.com/yamanalab/ec-darkpattern) from yamanalab. The dataset is not included in this repository; check its licence upstream before redistributing it.
+- **Training recipe:** near-duplicates removed (digits normalised), train/validation/test split by source page group (about 70/15/15) so the same page never appears on both sides, class weights, label smoothing 0.05, AdamW at 3e-5 with 10% warm-up, early stopping on macro-F1, and temperature scaling fitted on the validation set.
+- **Screenshot and HTML checks** are rule-based heuristics, not trained models.
 
-| Component | Library / Framework | Purpose |
-|---|---|---|
-| **Web Server** | `Flask` ($\ge 3.0$) | Lightweight, isolated HTTP server handling in-memory audits and static assets |
-| **Deep Learning** | `PyTorch` (`torch` $\ge 2.0$) | Neural network runtime for transformer inference |
-| **NLP Transformer** | `Hugging Face Transformers` | DistilBERT architecture (`distilbert-base-uncased`) fine-tuned for dark pattern detection |
-| **Model Weights** | `safetensors` ($\ge 0.4$) | Fast, secure zero-copy tensor serialization for transformer checkpoints |
-| **Vision / OCR** | `EasyOCR` ($\ge 1.7$) | Client-side visual OCR text recognition from screenshots |
-| **Computer Vision** | `OpenCV` (`opencv-python-headless` $\ge 4.8$) | Bounding box rendering, image slicing, and coordinate mapping |
-| **HTML Parsing** | `BeautifulSoup4` (`bs4` $\ge 4.12$) | DOM tree traversal, pre-selected checkbox detection, and visual asymmetry rules |
-| **Image Processing** | `Pillow` (`PIL` $\ge 10.0$) | In-memory image format verification, safe decoding, thumbnail preview |
-| **Evaluation Metrics**| `scikit-learn` ($\ge 1.3$) | Precision, recall, macro-F1, and confusion matrix calculation |
-| **Data Processing** | `pandas` ($\ge 2.0$) | Dataset structuring and metric tabulation |
-| **Testing** | `pytest` ($\ge 7.4$) | Automated test suite execution |
+### Evaluation (held-out test set)
 
-*Note: The frontend has **zero** external libraries, zero frameworks (no React/Vue), zero build steps, and zero CDN links. All SVGs, fonts, and scripts are 100% self-hosted and fully operational offline.*
+| Metric                    | Value  |
+| ------------------------- | ------ |
+| Macro-F1 (6 classes)      | 0.\_\_ |
+| Dark vs benign: precision | 0.\_\_ |
+| Dark vs benign: recall    | 0.\_\_ |
+| Dark vs benign: F1        | 0.\_\_ |
+
+The per-class table and the confusion matrix are shown live in the app's "How good is it?" panel and are stored in `outputs/model/meta.json`. Misclassified examples are in `outputs/model/test_errors.csv`.
+
+### Known limitations
+
+- Genuine low-stock messages and fake scarcity can use identical wording, so text alone cannot always tell them apart.
+- Countdown-like text that is not a sales timer (for example delivery cut-off times) can be flagged as urgency.
+- A ticked checkbox in a screenshot cannot be told apart from one the user ticked. The HTML `checked` attribute is more reliable.
+- Rule-based checks are heuristics, not verified findings. Every flag needs human review.
+- Hidden checkout steps cannot be seen from a pasted page or a single screenshot.
+- English text only.
 
 ---
 
-## Setup & Quickstart
+## Setup
 
-### 1. Prerequisites
-- Python 3.10, 3.11, 3.12, 3.13, or 3.14.
-- Windows, macOS, or Linux.
+Requires Python 3.10 or newer and about 2 GB of disk space. A GPU is not needed.
 
-### 2. Environment Setup
 ```powershell
-# Clone the repository
-git clone https://github.com/your-username/cheeksShield.git
-cd cheeksShield
+git clone https://github.com/voldepotter/cheekshield.git
+cd cheekshield
 
-# Create a virtual environment
 python -m venv .venv
+.\.venv\Scripts\Activate.ps1          # macOS/Linux: source .venv/bin/activate
 
-# Activate the virtual environment
-# Windows PowerShell:
-.\.venv\Scripts\Activate.ps1
-# macOS/Linux:
-# source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
----
+### 1. Download the model weights
 
-## Model Weights & Placement
+The weights file (`model.safetensors`, about 250 MB) is too large for git, so it is attached to the **v1.0 release**. The small model files (`config.json`, `meta.json`, tokenizer files) are already in `outputs/model/`; only the weights need downloading.
 
-### Model Weights Storage Notice
-> **Note on Model Weights:** Model weights (`*.safetensors`, `*.bin`, `*.pt`) are large binaries and are **not stored in git** (enforced via `.gitignore`).
->
-> **Reviewer Download Link:**
-> - Checkpoint Archive: `[DOWNLOAD_LINK_PLACEHOLDER: Insert Google Drive / Hugging Face Release URL here]`
-> - Alternatively, configure Git LFS if tracking via Git LFS remote storage.
+Windows (PowerShell):
 
-### How to Place Your Trained Model in `outputs/model/`
-Place your fine-tuned model checkpoint bundle directly inside the `outputs/model/` directory (tracked via `outputs/model/.gitkeep`):
-
-```
-outputs/model/
-├── meta.json                # REQUIRED: Evaluation report, classes, temperature, confusion matrix
-├── model.safetensors        # REQUIRED: Weights (or pytorch_model.bin)
-├── config.json              # REQUIRED: Hugging Face DistilBERT config
-├── tokenizer.json           # REQUIRED: Fast tokenizer definition
-├── vocab.txt                # REQUIRED: WordPiece vocabulary
-├── tokenizer_config.json    # Tokenizer settings
-└── special_tokens_map.json  # Special token mappings
+```powershell
+curl.exe -L -o outputs\model\model.safetensors https://github.com/voldepotter/cheekshield/releases/download/v1.0/model.safetensors
 ```
 
-#### Required `meta.json` Structure
-Your `meta.json` file must contain:
-- `classes`: List of classification labels, e.g. `["Urgency", "Scarcity", "Social Proof", "Misdirection", "Other Dark Pattern", "Not Dark Pattern"]`.
-- `temperature`: Calibrated temperature scaling parameter (e.g. `1.8`).
-- `dark_threshold`: Classification decision threshold (e.g. `0.45`).
-- `test_report`: Scikit-learn classification report dictionary with `macro avg` (`f1-score`, `precision`, `recall`) and per-class metrics.
-- `binary_report_tuned` or `binary_report`: `{ "threshold": 0.45, "precision": 0.91, "recall": 0.89, "f1": 0.90 }`.
-- `confusion_matrix`: $N \times N$ integer matrix where rows = true classes and columns = predicted classes (ordered identical to `classes`).
+macOS / Linux:
 
----
+```bash
+curl -L -o outputs/model/model.safetensors https://github.com/voldepotter/cheekshield/releases/download/v1.0/model.safetensors
+```
 
-## Preflight Verification Checklist
+You can also download it from the [Releases page](https://github.com/voldepotter/cheekshield/releases) and copy it to `outputs/model/model.safetensors`. The SHA-256 checksum is listed in the release notes.
 
-Before starting the server with a real model, run the preflight verification script:
+### 2. Download the OCR weights (screenshots only, needs internet once)
+
+```powershell
+python -c "import easyocr; easyocr.Reader(['en'])"
+```
+
+### 3. Check everything is in place
 
 ```powershell
 python scripts/preflight.py
 ```
 
-The preflight script performs non-destructive diagnostics and prints a PASS/FAIL checklist:
-1. **Python Dependencies**: Verifies all required libraries import cleanly.
-2. **Engine Module**: Confirms `engine/darkpattern_engine.py` exists and exposes all required functions (`predict`, `audit_html_dom`, `analyze_screenshot`, `summarize_findings`, `detect_countdown_timers`, `load_trained_bundle`).
-3. **Model Bundle**: Checks `outputs/model/` for `meta.json`, weights (`*.safetensors` or `*.bin`), and tokenizer files (`tokenizer.json` or `vocab.txt`).
-4. **EasyOCR Weights**: Checks `~/.EasyOCR/model/` for OCR detector and recognizer weights. If missing, prints the exact command to download them:
-   ```powershell
-   python -c "import easyocr; easyocr.Reader(['en'])"
-   ```
-5. **Server Port**: Verifies the configured port (default `5000` or `$env:PORT`) is free.
+It prints a PASS/FAIL checklist (packages, engine, model files, OCR weights, port). Every FAIL line says how to fix it.
 
-Every `[FAIL]` line prints the exact remediation command. The script does not load the heavy model into memory unless all files are present.
+### 4. Run
 
----
-
-## Running the Application
-
-### A. Real Model Mode (Default: `CHEEK_MOCK=0`)
-When your trained model files are placed in `outputs/model/`:
 ```powershell
 python app.py
 ```
-At startup, the server logs a single clear status line:
-```
-INFO:cheekshield: CheekShield startup: engine=real, model_dir=C:\...\outputs\model, meta.json=found
-```
-Open your browser to: **`http://127.0.0.1:5000`**  
-The header status chip will display **"Model ready"** in green.
 
-### B. Mock Engine Mode (`CHEEK_MOCK=1`)
-If you want to review the UI, test interactions, or run automated verification before integrating the real model:
+Open the address printed at startup (by default `http://127.0.0.1:5000`). The header chip should say **Model ready**. The first audit is slower while the model loads.
+
+Click **Deceptive** or **Clean** under the input box to load a sample, then press **Audit**. Samples are in `samples/`.
+
+### Optional settings
+
+| Variable        | Effect                                                                                                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MODEL_DIR`     | Use a model folder other than `outputs/model`                                                                                                                          |
+| `PORT`          | Change the server port                                                                                                                                                 |
+| `CHEEK_MOCK=1`  | Use a fake engine for UI work. The header chip says **Mock engine**, so it can never be mistaken for the real model                                                    |
+| `DEMO_REPLAY=1` | If the engine fails, show saved sample results with a visible "Saved result" tag. Off by default; saved results never appear silently or when the real engine answered |
+
+---
+
+## Updating the model
+
+1. Train, and copy the full output folder (weights, `config.json`, tokenizer files, `meta.json`) into `outputs/model/`.
+2. The running server detects the change and reloads. The UI and the evaluation panel update by themselves.
+3. To share it, commit the small files, upload the new `model.safetensors` as a new GitHub release, and update the version in the download link above.
+
+The weights and `meta.json` must come from the same training run.
+
+Retraining (optional, needs the dataset downloaded separately):
+
 ```powershell
-# Windows PowerShell:
-$env:CHEEK_MOCK = "1"
-python app.py
-
-# macOS / Linux / Bash:
-# CHEEK_MOCK=1 python app.py
+python engine/darkpattern_engine.py --data path/to/ec-darkpattern/dataset/dataset.tsv --out outputs/model
 ```
-At startup, the server logs:
-```
-INFO:cheekshield: CheekShield startup: engine=mock, model_dir=C:\...\outputs\model, meta.json=not found
-```
-In mock mode, the header status chip prominently displays **"Mock engine"** so it can never be mistaken for the real trained model.
 
----
-
-## Sample Inputs Provided
-
-The repository provides ready-to-audit samples in `samples/`:
-- **Deceptive Plain Text**: `samples/text_deceptive.txt` — Fake countdown urgency, scarcity, and fabricated social proof.
-- **Clean Plain Text**: `samples/text_clean.txt` — Transparent e-commerce delivery timeline, clear return policy.
-- **Deceptive HTML DOM**: `samples/html_deceptive.html` — Hidden subscription auto-renewal, pre-ticked add-on checkbox, confirm-shaming opt-out link.
-- **Clean HTML DOM**: `samples/html_clean.html` — Transparent headphone product listing with unticked opt-in newsletter checkbox.
-
-Clicking **"Deceptive"** or **"Clean"** under the input box in the web interface instantly loads these samples for one-click auditing.
-
----
-
-## Running the Automated Test Suite
+## Tests
 
 ```powershell
 python -m pytest tests/ -v
 ```
 
-All 83 core tests pass offline. When `outputs/model/` does not contain trained weights, real model inference tests automatically skip with a clear reason:
-```
-tests/test_api.py::test_real_model_inference SKIPPED (outputs/model/ is empty or missing model files; real model tests skipped.)
-```
+Tests that need the real model are skipped automatically when the weights are missing.
 
 ---
 
-## Demo Replay & Safety Net
+## Privacy
 
-In demo mode (`?demo=1`), CheekShield includes an optional safety net governed by `DEMO_REPLAY=1`:
-- **Default (`DEMO_REPLAY=0`)**: If the backend engine fails or is unreachable, the system displays the actual error.
-- **Demo Replay Active (`DEMO_REPLAY=1`)**: If the engine fails during a live stage demonstration, the system falls back to saved sample results and displays a prominent, unmistakable **"Saved result (demo replay)"** banner and receipt tag on screen. Canned results never appear silently, and never appear when the real engine answers.
+Everything is processed in memory. Uploaded text, HTML and screenshots are not written to disk, not logged and not shared. No cookies and no third-party requests; fonts and scripts are self-hosted, so the app works offline after setup.
 
----
+## Dependencies
+
+| Library                                         | Used for                                                        |
+| ----------------------------------------------- | --------------------------------------------------------------- |
+| Flask                                           | Web server and API                                              |
+| PyTorch, Hugging Face Transformers, safetensors | Running the DistilBERT classifier                               |
+| EasyOCR                                         | Reading text from screenshots (runs on the server)              |
+| OpenCV (headless)                               | Drawing boxes and the button and checkbox checks on screenshots |
+| BeautifulSoup4                                  | Parsing HTML, pre-ticked boxes, hidden text                     |
+| Pillow                                          | Checking and decoding uploaded images                           |
+| scikit-learn, pandas                            | Training and evaluation metrics                                 |
+| pytest                                          | Tests                                                           |
+
+Exact versions are in `requirements.txt`. Base model: `distilbert-base-uncased` (Apache-2.0).
 
 ## Disclaimer
 
-> **Assistive Indication Only:** CheekShield AI provides assistive indications of potentially deceptive or unfair design patterns to aid designers, auditors, and shoppers. Its findings are based on machine learning classifications and heuristic rules; **they do not constitute legal findings or regulatory determinations of illegality**. Every flagged finding warrants human review in context.
+CheekShield AI provides assistive indications of potentially deceptive design to help designers, auditors and shoppers. Its findings come from a machine-learning model and heuristic rules. They are not legal findings, and every flagged item should be reviewed by a person in context.
+
+## Licence
+
+MIT. See `LICENSE`.
