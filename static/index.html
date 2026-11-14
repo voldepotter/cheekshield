@@ -371,7 +371,7 @@
             </div>
 
             <!-- Evidence Header & Controls -->
-            <div class="evidence-header">
+            <div id="evidence-header" class="evidence-header" hidden>
               <h2 class="evidence-title">What we found</h2>
               <div class="evidence-controls">
                 <label for="evidence-filter" class="sr-only">Filter by source</label>
@@ -400,26 +400,6 @@
             <div id="routine-preselections-group" class="routine-group" hidden>
               <h3 style="font-size: 14px; color: var(--white-dim); margin-bottom: 8px;">Routine pre-selections (Benign convenience)</h3>
               <div id="routine-list" class="evidence-list"></div>
-            </div>
-
-            <!-- Checked & Fine (Collapsed details) -->
-            <details id="checked-fine-details" class="checked-details" hidden>
-              <summary id="checked-fine-summary" style="cursor: pointer; padding: 10px; background: var(--ink-1); border: 1px solid var(--hairline); border-radius: var(--radius-sm); font-size: 13px; color: var(--white-dim);">
-                Checked and fine (0)
-              </summary>
-              <div id="checked-fine-list" class="evidence-list" style="margin-top: 10px;"></div>
-            </details>
-
-            <!-- Clean State Display (Mandatory Section 7 Phase 4) -->
-            <div id="clean-state-box" class="clean-state-box" hidden>
-              <div class="clean-icon-wrap">
-                <svg class="icon" style="width: 28px; height: 28px;"><use href="#glyph-leaf-tick" /></svg>
-              </div>
-              <h3 class="clean-title">Fresh. No manipulation found.</h3>
-              <p class="clean-sub">
-                No deceptive patterns, countdown pressure, or hidden add-ons were detected in this input.
-                This is not a guarantee. Hidden checkout steps and dynamic backend pricing cannot be seen from this snippet.
-              </p>
             </div>
           </div>
         </div>

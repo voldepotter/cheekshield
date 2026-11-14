@@ -1,7 +1,7 @@
 /**
  * CheekShield AI — Evidence List & Findings Controller (Section 7 Phase 4)
  *
- * Renders flagged findings, routine pre-selections, and checked-fine items.
+ * Renders flagged findings and routine pre-selections.
  * Handles:
  *  - Filtering by evidence kind (All, Model, Rule)
  *  - Filtering by category (chips)
@@ -9,8 +9,6 @@
  *  - Safe token attribution highlighting with orange alpha and hover tooltips
  *  - Rule evidence chips (dashed, raw weights, no %)
  *  - Collapsible ethical fixes and gate notes
- *  - Pagination for checked-fine items (50 per batch)
- *  - Clean state view when no manipulation found
  *  - Synchronized hover and focus with screenshot viewer
  */
 
@@ -25,7 +23,7 @@ export class FindingsController {
 
     // Elements
     this.resultsSection = document.getElementById('results-section');
-    this.evidenceHeader = document.querySelector('.evidence-header');
+    this.evidenceHeader = document.getElementById('evidence-header') || document.querySelector('.evidence-header');
     this.evidenceList = document.getElementById('evidence-list');
     this.filterSelect = document.getElementById('evidence-filter');
     this.sortSelect = document.getElementById('evidence-sort');
@@ -35,21 +33,11 @@ export class FindingsController {
     this.routineGroup = document.getElementById('routine-preselections-group');
     this.routineList = document.getElementById('routine-list');
 
-    // Checked and fine
-    this.checkedDetails = document.getElementById('checked-fine-details');
-    this.checkedSummary = document.getElementById('checked-fine-summary');
-    this.checkedList = document.getElementById('checked-fine-list');
-
-    // Clean state box
-    this.cleanStateBox = document.getElementById('clean-state-box');
-
     // Internal state
     this.currentResult = null;
     this.selectedCategories = new Set(); // empty means all
     this.activeFilter = 'all'; // all | model | rule
     this.activeSort = 'risk'; // risk | position | score
-    this.checkedPage = 1;
-    this.checkedPageSize = 50;
 
     this.initListeners();
   }
@@ -114,9 +102,13 @@ export class FindingsController {
     const isClean = summary.status === 'clean' || flagged.length === 0;
 
     if (isClean) {
-      this.renderCleanState(result);
+      if (this.evidenceHeader) this.evidenceHeader.hidden = true;
+      if (this.evidenceList) {
+        this.evidenceList.innerHTML = '';
+        this.evidenceList.hidden = true;
+      }
+      if (this.categoryChipsContainer) this.categoryChipsContainer.hidden = true;
     } else {
-      if (this.cleanStateBox) this.cleanStateBox.hidden = true;
       if (this.evidenceHeader) this.evidenceHeader.hidden = false;
       if (this.evidenceList) this.evidenceList.hidden = false;
 
@@ -125,17 +117,9 @@ export class FindingsController {
     }
 
     this.renderRoutinePreselections(findings);
-    this.renderCheckedFine(findings);
   }
 
   renderNoContentState(result) {
-    if (this.cleanStateBox) {
-      this.cleanStateBox.hidden = false;
-      const title = this.cleanStateBox.querySelector('.clean-title');
-      const sub = this.cleanStateBox.querySelector('.clean-sub');
-      if (title) title.textContent = 'Nothing to read yet.';
-      if (sub) sub.textContent = 'The input contained no readable text blocks, interactive elements, or product details to audit.';
-    }
     if (this.evidenceHeader) this.evidenceHeader.hidden = true;
     if (this.evidenceList) {
       this.evidenceList.innerHTML = '';
@@ -143,29 +127,6 @@ export class FindingsController {
     }
     if (this.categoryChipsContainer) this.categoryChipsContainer.hidden = true;
     if (this.routineGroup) this.routineGroup.hidden = true;
-    if (this.checkedDetails) this.checkedDetails.hidden = true;
-  }
-
-  // =========================================================================
-  // Clean State Display (Mandatory Section 7 Phase 4)
-  // =========================================================================
-  renderCleanState(result) {
-    if (this.cleanStateBox) this.cleanStateBox.hidden = false;
-    if (this.evidenceHeader) this.evidenceHeader.hidden = true;
-    if (this.evidenceList) {
-      this.evidenceList.innerHTML = '';
-      this.evidenceList.hidden = true;
-    }
-
-    const summary = result.summary || {};
-    const checkedCount = summary.checked_fine || 0;
-    const subEl = this.cleanStateBox.querySelector('.clean-sub');
-    if (subEl) {
-      subEl.innerHTML = `
-        No deceptive patterns, countdown pressure, or hidden add-ons were detected across ${checkedCount} checked items.<br>
-        <span style="display:inline-block; margin-top: 6px; opacity: 0.75;">This is not a guarantee. Hidden checkout steps and dynamic backend pricing cannot be seen from this snippet.</span>
-      `;
-    }
   }
 
   // =========================================================================
@@ -638,74 +599,6 @@ export class FindingsController {
       row.appendChild(rail);
       row.appendChild(content);
       this.routineList.appendChild(row);
-    }
-  }
-
-  // =========================================================================
-  // Checked and Fine (Collapsed details, paginated at 50)
-  // =========================================================================
-  renderCheckedFine(findings) {
-    const checkedItems = findings.filter((f) => f.kind === 'checked');
-
-    if (!this.checkedDetails || !this.checkedList || !this.checkedSummary) return;
-
-    if (checkedItems.length === 0) {
-      this.checkedDetails.hidden = true;
-      this.checkedList.innerHTML = '';
-      return;
-    }
-
-    this.checkedDetails.hidden = false;
-    this.checkedSummary.textContent = `Checked and fine (${checkedItems.length})`;
-    this.checkedList.innerHTML = '';
-    this.checkedPage = 1;
-
-    this.renderCheckedPage(checkedItems);
-  }
-
-  renderCheckedPage(checkedItems) {
-    const countToRender = Math.min(this.checkedPage * this.checkedPageSize, checkedItems.length);
-    const slice = checkedItems.slice(0, countToRender);
-
-    this.checkedList.innerHTML = '';
-
-    for (const item of slice) {
-      const div = document.createElement('div');
-      div.style.padding = 'var(--space-2) var(--space-3)';
-      div.style.borderBottom = '1px solid var(--hairline)';
-      div.style.fontSize = 'var(--text-xs)';
-      div.style.color = 'var(--white-dim)';
-      div.style.display = 'flex';
-      div.style.justifyContent = 'space-between';
-      div.style.gap = 'var(--space-3)';
-
-      const textSpan = document.createElement('span');
-      textSpan.style.fontFamily = 'var(--font-mono)';
-      textSpan.textContent = item.text || '(empty block)';
-
-      const okBadge = document.createElement('span');
-      okBadge.style.color = 'var(--leaf)';
-      okBadge.textContent = 'Clear';
-
-      div.appendChild(textSpan);
-      div.appendChild(okBadge);
-      this.checkedList.appendChild(div);
-    }
-
-    // Pagination button if more items remain
-    if (countToRender < checkedItems.length) {
-      const moreBtn = document.createElement('button');
-      moreBtn.type = 'button';
-      moreBtn.className = 'receipt-btn';
-      moreBtn.style.marginTop = 'var(--space-3)';
-      moreBtn.style.alignSelf = 'center';
-      moreBtn.textContent = `Show more (${checkedItems.length - countToRender} remaining)`;
-      moreBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.checkedPage++;
-        this.renderCheckedPage(checkedItems);
-      });
-      this.checkedList.appendChild(moreBtn);
     }
   }
 
